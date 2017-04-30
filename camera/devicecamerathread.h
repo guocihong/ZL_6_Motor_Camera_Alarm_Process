@@ -26,6 +26,7 @@ signals:
 public:
     DeviceCamera *devicecamera;
     bool isValidInitCamera;
+    quint8 CameraOfflineCount;
 
     uchar *rgb_buff;
     quint16 SampleInterval;

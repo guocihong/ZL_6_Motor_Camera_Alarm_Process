@@ -38,7 +38,7 @@ public:
     void ParseMotorControlCmdFromAlarmHost(QString Msg, TcpHelper *tcpHelper);
     void SendMotorStatusInfoToAlarmHost(QString cmd, TcpHelper *tcpHelper);
 
-    void SaveMotorLastestStatusInfo();
+    static void SaveMotorLastestStatusInfo();
 
     void CommonCode(QByteArray data, TcpHelper *tcpHelper);
 

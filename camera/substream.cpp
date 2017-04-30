@@ -8,7 +8,7 @@ QList<QImage> SubStream::SubImageBuffer = QList<QImage>();
 SubStream::SubStream(QObject *parent) :
     QObject(parent)
 {
-
+    SubStreamWorkThread = NULL;
 }
 
 void SubStream::Start()
@@ -16,20 +16,20 @@ void SubStream::Start()
     if (GlobalConfig::UseSubCamera == 1) {
         GetCameraInfo::GetSubCameraDevice();
 
-        if (!GetCameraInfo::SubStreamCamera.isEmpty()) {
-            rgb_buff = (uchar*)malloc(GlobalConfig::SampleWidth * GlobalConfig::SampleHeight * 24 / 8);
+        rgb_buff = (uchar*)malloc(GlobalConfig::SampleWidth * GlobalConfig::SampleHeight * 24 / 8);
 
-            SubStreamWorkThread = new DeviceCameraThread(
-                        rgb_buff, GlobalConfig::SubCameraSleepTime,
-                        GetCameraInfo::SubStreamCamera,
-                        GlobalConfig::SampleWidth,GlobalConfig::SampleHeight,16,V4L2_PIX_FMT_YUYV);
+        SubStreamWorkThread = new DeviceCameraThread(
+                    rgb_buff, GlobalConfig::SubCameraSleepTime,
+                    GetCameraInfo::SubStreamCamera,
+                    GlobalConfig::SampleWidth,GlobalConfig::SampleHeight,16,V4L2_PIX_FMT_YUYV);
 
-            connect(SubStreamWorkThread,SIGNAL(signalCaptureFrame(QImage)),this,SLOT(slotCaptureFrame(QImage)));
+        connect(SubStreamWorkThread,SIGNAL(signalCaptureFrame(QImage)),this,SLOT(slotCaptureFrame(QImage)));
 
-            connect(SubStreamWorkThread,SIGNAL(signalCameraOffline()),this,SLOT(slotReInitCamera()));
+        connect(SubStreamWorkThread,SIGNAL(signalCameraOffline()),this,SLOT(slotReInitCamera()));
 
-            SubStreamWorkThread->start();
-        }
+        SubStreamWorkThread->start();
+
+        CameraOfflineCount = 0;
     }
 }
 
@@ -40,10 +40,22 @@ void SubStream::slotCaptureFrame(QImage image)
     }
 
     SubImageBuffer.append(image);
+
+    //摄像头在线
+    GlobalConfig::SubStreamStateInfo = 1;
+    CameraOfflineCount = 0;
 }
 
 void SubStream::slotReInitCamera()
 {
+    //摄像头离线
+    GlobalConfig::SubStreamStateInfo = 0;
+    CameraOfflineCount++;
+
+    if (CameraOfflineCount == 10) {
+        system("reboot");
+    }
+
     //释放资源
     SubStreamWorkThread->StopCapture = true;
     SubStreamWorkThread->Finished = true;
@@ -53,6 +65,8 @@ void SubStream::slotReInitCamera()
     SubStreamWorkThread->Clear();
 
     delete SubStreamWorkThread;
+
+    SubStreamWorkThread = NULL;
 
     //重新初始化
     if (GlobalConfig::UseSubCamera == 1) {
@@ -68,6 +82,8 @@ void SubStream::slotReInitCamera()
         connect(SubStreamWorkThread,SIGNAL(signalCameraOffline()),this,SLOT(slotReInitCamera()));
 
         SubStreamWorkThread->start();
+
+        SubStreamWorkThread->StopCapture = false;
 
     }
 

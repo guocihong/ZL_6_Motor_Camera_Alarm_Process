@@ -10,7 +10,7 @@ void GetCameraInfo::GetMainCameraDevice()
 {
     /************切断左防区摄像头电源**************/
     DeviceControlUtil::DisableMainStreamCamera();
-    CommonSetting::Sleep(1000);
+    CommonSetting::Sleep(2000);
 
     system("find /sys/devices/platform -name video4linux > path.txt");//arm
 
@@ -23,7 +23,7 @@ void GetCameraInfo::GetMainCameraDevice()
 
     /************使能主控制杆摄像头电源**************/
     DeviceControlUtil::EnableMainStreamCamera();
-    CommonSetting::Sleep(1000);
+    CommonSetting::Sleep(3000);
 
 
     if (SubCameraPath.isEmpty()) {
@@ -58,7 +58,7 @@ void GetCameraInfo::GetSubCameraDevice()
 {
     /************切断辅助控制摄像头电源**************/
     DeviceControlUtil::DisableSubStreamCamera();
-    CommonSetting::Sleep(1000);
+    CommonSetting::Sleep(2000);
 
     system("find /sys/devices/platform -name video4linux > path.txt");//arm
 
@@ -71,7 +71,7 @@ void GetCameraInfo::GetSubCameraDevice()
 
     /************使能辅助控制杆摄像头电源**************/
     DeviceControlUtil::EnableSubStreamCamera();
-    CommonSetting::Sleep(1000);
+    CommonSetting::Sleep(3000);
 
     if (MainCameraPath.isEmpty()) {
         system("find /sys/devices/platform -name video4linux > path.txt");

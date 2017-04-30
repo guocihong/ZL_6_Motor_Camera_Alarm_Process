@@ -4,7 +4,14 @@
 #include <QObject>
 #include <QMutex>
 #include <QTimer>
+#include <QStringList>
 #include "globalconfig.h"
+
+#define SAMPLE_POINT          10             //采样多少个点用来判断钢丝比较松
+#define MIN_SAMPLE_VALUE      60             //瞬间张力采样值小于这个值，就认为钢丝比较松
+#define TARGET_SAMPLE_VALUE   80            //收紧钢丝达到这个值，就认为调整结束，符合目标要求
+#define MOTOR_RUN_TIME        10             //电机运转时间，单位为秒
+#define WIRE_CUT_SAMPLE_VALUE 10             //判定钢丝被剪断时的瞬间张力采样值
 
 class ParseMotorControlUartMsg : public QObject
 {
@@ -33,6 +40,9 @@ public:
     void update_led_status(void);
     void update_alarm_status(void);
 
+    void motor_start(quint8 index);
+    void motor_stop();
+
 private slots:
     void slotParseMotorControltUartMsg(void);
 
@@ -45,12 +55,15 @@ private:
     quint16 ad_samp_pnum;
 
     //阶段求和
+    //0-12分别代表：左1~6、右1~6、杆自身
     sAD_Sum ad_samp_sum[13];
 
     //各通道连续采样点(均衡后)的阀值判定： 0 - 范围内； 1 - 超阀值
+    //0-12分别代表：左1~6、右1~6、杆自身
     quint8 ad_chn_over[13];
 
     //用于基准值跟踪的计量点数
+    //0-12分别代表：左1~6、右1~6、杆自身
     quint8 md_point[13];
 
     //电机堵转次数

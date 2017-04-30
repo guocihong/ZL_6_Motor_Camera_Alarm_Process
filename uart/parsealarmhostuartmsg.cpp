@@ -1,11 +1,8 @@
 #include "parsealarmhostuartmsg.h"
-#include "uartutil.h"
+#include "rs485msgthread.h"
 #include "globalconfig.h"
 #include "CommonSetting.h"
-
-/*
- * 本类专门用来解析报警主机RS485发送过来的数据包
- */
+#include "tcp/checknetwork.h"
 
 ParseAlarmHostUartMsg *ParseAlarmHostUartMsg::instance = NULL;
 
@@ -33,18 +30,57 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
         QByteArray data = QByteArray();
         QStringList DupList = QStringList();
 
+        /*
+         * 方法一：接收到报警主机的RS485广播命令，主动通过tcp发送一个OK数据包给报警主机，用来测试网络的好坏
+         * 这种方法存在一个问题，如果报警主机RS485没有发送广播命令，那么就不会去检测网络的好坏，就会出现网络不通的情况
+         *比如，报警主机停止服务，过了一段时间后，如果有设备网络不通，那么报警主机发出广播搜索命令，就会出现设备返回不全的问题
+         *为了解决这个问题，现在改成主动通过tcp发送ok数据包给报警主机，如果设备网络不通，就会自动重启网卡，可以完美解决网络不通的情况
+         *
+        //判断是否是广播命令，主要用来测试网络是否正常，需要主动给报警主机发送一个ok包
+        //如果发送失败，则认为网络不通，则将工作模式切换为RS485
+        if (cmd[1] == CMD_ADDR_BC) {//广播命令
+            //不管处于什么模式，都需要返回一个OK数据包，不然可能会碰到一上电网络不好的情况，这样就会导致网络永远不通
+            //if (GlobalConfig::system_mode == GlobalConfig::TcpMode) {//只有处于tcp模式才需要测试网络的连通性
+                CheckNetWork::newInstance()->SendOKAckToAlarmHost();
+            //}
+        }
+        */
+
         switch(cmd[4]) {
         case 0xE0://询问状态
-            //返回：16 01 设备地址 01 00 校验和
-            data[0] = 0x01;
-            data[1] = 0x00;
-            SendDataToAlarmHost(data);
+            //返回1：16 01 设备地址 02 F0 01/02/03 校验和
+            //返回2：16 01 设备地址 01 00 校验和（该地址模块所有防区正常）
+            if (GlobalConfig::ip_addr == CMD_ADDR_UNSOLV) {//本设备无有效地址,只回参数应答
+                data[0] = 1;
+                data[1] = 0xF1;
+            } else {//有有效地址,回防区状态
+                if ((GlobalConfig::alarm_out_flag & 0x38) == 0x00) {//2个防区均无报警
+                    data[0] = 1;
+                    data[1] = 0x00;
+                } else {//有报警
+                    data[0] = 2;
+                    data[1] = 0xF0;
+                    data[2] = (GlobalConfig::alarm_out_flag & 0x38) >> 3;
+                }
+            }
+
+            GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+
+            if (cmd[1] == GlobalConfig::ip_addr) {//只有单播命令才返回，报警主机发送的所有广播命令一律不返回
+                SendDataToAlarmHost(data);
+            }
             break;
+
         case 0xE1://询问地址
             //返回：16 01 设备地址 01 F1 校验和
             data[0] = 0x01;
             data[1] = 0xF1;
-            SendDataToAlarmHost(data);
+
+            GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+
+            if (cmd[1] == GlobalConfig::ip_addr) {//只有单播命令才返回，报警主机发送的所有广播命令一律不返回
+                SendDataToAlarmHost(data);
+            }
             break;
 
         case 0xE3://设置设备返回延时时间
@@ -60,6 +96,13 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
             data[0] = 0x02;
             data[1] = 0xF4;
             data[2] = GlobalConfig::gl_reply_tick;
+
+            if (cmd[1] == CMD_ADDR_BC) {//广播命令需要延时返回
+                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = true;
+            } else if (cmd[1] == GlobalConfig::ip_addr){//单播命令不需要延时返回
+                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+            }
+
             SendDataToAlarmHost(data);
             break;
 
@@ -110,7 +153,13 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[28] = GlobalConfig::ip_addr;
                 data[29] = GlobalConfig::beep_during_temp * SCHEDULER_TICK / 1000;
                 data[30] = 0;
+
+                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+
                 SendDataToAlarmHost(data);
+
                 break;
 
             case 0x12://读报警信息
@@ -131,8 +180,12 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[9] = LOW(GlobalConfig::ad_alarm_base);     //静态张力报警右
 
                 data[10] = GlobalConfig::doorkeep_state;        //门磁
-                SendDataToAlarmHost(data);
 
+                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+
+                SendDataToAlarmHost(data);
                 break;
 
             case 0x14://读瞬间张力
@@ -168,6 +221,10 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 //杆自身
                 data[34] = HIGH(GlobalConfig::ad_chn_sample[12]);
                 data[35] = LOW(GlobalConfig::ad_chn_sample[12]);
+
+                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
 
                 SendDataToAlarmHost(data);
                 break;
@@ -205,6 +262,10 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 //杆自身
                 data[34] = HIGH(GlobalConfig::ad_chn_base[12].base);
                 data[35] = LOW(GlobalConfig::ad_chn_base[12].base);
+
+                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
 
                 SendDataToAlarmHost(data);
                 break;
@@ -259,15 +320,54 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 //do nothing
                 break;
 
-            case 0xF0://张力杆电机控制(主机->设备)
+            case 0xF0://控制电机正反转
                 //接收:16 FF 01 06 E8 04 F0 电机号(0-11) 正转(1)/反转(2)/停止(0) 运转时间(0-255) 校验和
                 //需要转发给电机控制杆
                 GlobalConfig::SendMsgToMotorControlBuffer.append(cmd);
+
+                //这里必须，不然手动松紧钢丝时，静态基准和瞬间张力不能同步更新
+                GlobalConfig::gl_chnn_index = cmd[7];//电机编号
+
+                //这几个变量只有进入实时检测阶段才会用到
+                if (GlobalConfig::system_status == GlobalConfig::SYS_CHECK) {
+                    GlobalConfig::isEnterAutoAdjustMotorMode = true;
+                    GlobalConfig::adjust_status = 2;
+
+                    GlobalConfig::isEnterManualAdjustMotorMode = true;
+                }
                 break;
 
             case 0xF1://采样值清零---->消除电路上的误差
                 //需要转发给电机控制杆
                 GlobalConfig::SendMsgToMotorControlBuffer.append(cmd);
+
+                /******************************************************************/
+                //1、在加级联的情况下，需要在现场通过报警主机先进行采样值恢复，然后在执行采样值清零
+                //2、生产车间进行采样值恢复和采样值清零都是通过广播模式设置
+                //3、现场通过报警主机进行采样值恢复和采样值清零是通过单播模式设置
+
+                //只有报警主机发出的采样值清零命令才生效
+                if (cmd[1] == GlobalConfig::ip_addr) {//单播模式
+                    quint16 sample_value_sum = 0;
+                    for (int i = 0; i < 32; i++) {
+                        sample_value_sum += cmd[7 + i];
+                    }
+
+                    if (sample_value_sum == 0) {//本条命令是进行采样值恢复
+                        GlobalConfig::is_sample_clear = 0;
+
+                        CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                     "AppGlobalConfig/is_sample_clear",
+                                                     QString::number(GlobalConfig::is_sample_clear));
+                    } else {//本条命令是进行采样值清零
+                        GlobalConfig::check_sample_clear_tick = 3000 / SCHEDULER_TICK;
+                    }
+                } else if (cmd[1] == CMD_ADDR_BC) {//广播模式
+                    //生产车间发出的采样值清零命令不生效
+                    //什么都不做
+                }
+
+                /******************************************************************/
                 break;
 
             case 0xF2://设置采样点数---->连续采样多少个点以确定钢丝是否比较松
@@ -281,6 +381,11 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[4] = HIGH(GlobalConfig::ad_chnn_wire_cut);
                 data[5] = LOW(GlobalConfig::ad_chnn_wire_cut);
                 data[6] = GlobalConfig::gl_motor_adjust_flag;
+
+                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+
                 SendDataToAlarmHost(data);
                 break;
 
@@ -299,6 +404,11 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[2] = 0x02;
                 data[3] = 0x1F;
                 data[4] = GlobalConfig::gl_motor_channel_number;
+
+                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+
                 SendDataToAlarmHost(data);
                 break;
 
@@ -317,11 +427,21 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[2] = 0x02;
                 data[3] = 0x20;
                 data[4] = GlobalConfig::is_motor_add_link;
+
+                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+
                 SendDataToAlarmHost(data);
                 break;
 
             case 0xF8://读取详细报警信息
+                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+
+                //本条命令肯定是单播命令，不可能是广播命令
+                get_alarm_detail_info();
                 break;
+
             case 0xF9://设置平均值点数-->采样多少个点求平均值
                 //接收：16 FF 01 04 E8 02 F9 [平均值点数(范围为4~8)] 校验和
                 //需要转发给电机张力控制杆
@@ -333,6 +453,16 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[2] = 0x02;
                 data[3] = 0x21;
                 data[4] = cmd[7];
+
+                if (cmd[1] == CMD_ADDR_BC) {//广播命令需要延时返回
+                    GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = true;
+                } else if (cmd[1] == GlobalConfig::ip_addr){//单播命令不需要延时返回
+                    GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+                }
+
+                //本条命令既可以通过广播设置，也可以通过单播设置
+                //通过广播设置，需要延时返回
+                //通过单播设置，不需要延时，可以立即返回
                 SendDataToAlarmHost(data);
                 break;
 
@@ -349,6 +479,16 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[2] = 0x02;
                 data[3] = 0x22;
                 data[4] = GlobalConfig::alarm_point_num;
+
+                if (cmd[1] == CMD_ADDR_BC) {//广播命令需要延时返回
+                    GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = true;
+                } else if (cmd[1] == GlobalConfig::ip_addr){//单播命令不需要延时返回
+                    GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+                }
+
+                //本条命令既可以通过广播设置，也可以通过单播设置
+                //通过广播设置，需要延时返回
+                //通过单播设置，不需要延时，可以立即返回
                 SendDataToAlarmHost(data);
                 break;
             }
@@ -358,7 +498,7 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
     }
 
     //启动延时返回数据包给报警主机
-    UartUtil::newInstance()->Start();
+    RS485MsgThread::newInstance()->Start();
 }
 
 void ParseAlarmHostUartMsg::SendDataToAlarmHost(QByteArray data)
@@ -383,4 +523,163 @@ void ParseAlarmHostUartMsg::SendDataToAlarmHost(QByteArray data)
     cmd[size + 3] = chk_sum;
 
     GlobalConfig::SendMsgToAlarmHostBuffer.append(cmd);
+}
+
+void ParseAlarmHostUartMsg::get_alarm_detail_info()
+{
+    QByteArray data = QByteArray();
+
+    //1、保存配置信息
+    data[0] = 0x1E;
+    data[1] = 0xE8;
+    data[2] = 0x1C;
+    data[3] = 0x08;
+
+    data[4] = HIGH(GlobalConfig::ad_sensor_mask_LR);//张力mask左
+    data[5] = LOW(GlobalConfig::ad_sensor_mask_LR); //张力mask右
+
+    data[6] = HIGH(GlobalConfig::ad_still_dn);      //静态张力允许下限高字节
+    data[7] = LOW(GlobalConfig::ad_still_dn);       //静态张力允许下限低字节
+
+    data[8] = HIGH(GlobalConfig::ad_still_up);      //静态张力允许上限高字节
+    data[9] = LOW(GlobalConfig::ad_still_up);       //静态张力允许上限低字节
+
+    data[10] = GlobalConfig::system_status;
+
+    for (int i = 0; i < 6; i++) {                   //左1~6的报警阀值
+        data[11 + i] = GlobalConfig::ad_still_Dup[i];
+    }
+
+    //左开关量
+    data[17] = 0;
+
+    //杆自身
+    data[18] = GlobalConfig::ad_still_Dup[12];
+
+    for (int i = 0; i < 6; i++) {                   //右1~6的报警阀值
+        data[19 + i] = GlobalConfig::ad_still_Dup[6 + i];
+    }
+
+    //右开关量
+    data[25] = 0;
+
+    //杆自身
+    data[26] = GlobalConfig::ad_still_Dup[12];
+
+    data[27] = 0;
+    data[28] = GlobalConfig::ip_addr;
+    data[29] = GlobalConfig::beep_during_temp * SCHEDULER_TICK / 1000;
+    data[30] = 0;
+    SendDataToAlarmHost(data);
+
+    data.clear();
+
+    //2、保存报警信息
+    //返回：16 01 设备地址 0A E8 08 1A  [张力掩码左] [张力掩码右] [外力报警左]  [外力报警右]
+    //[静态张力报警左] [静态张力报警右] [门磁]  校验和
+    data[0] = 0x0A;
+    data[1] = 0xE8;
+    data[2] = 0x08;
+    data[3] = 0x1A;
+
+    data[4] = HIGH(GlobalConfig::ad_sensor_mask_LR);//张力掩码左
+    data[5] = LOW(GlobalConfig::ad_sensor_mask_LR); //张力掩码右
+
+    data[6] = HIGH(GlobalConfig::AlarmDetailInfo.ExternalAlarm);    //外力报警左
+    data[7] = LOW(GlobalConfig::AlarmDetailInfo.ExternalAlarm);     //外力报警右
+
+    data[8] = HIGH(GlobalConfig::AlarmDetailInfo.StaticAlarm);      //静态张力报警左
+    data[9] = LOW(GlobalConfig::AlarmDetailInfo.StaticAlarm);       //静态张力报警右
+
+    data[10] = GlobalConfig::AlarmDetailInfo.DoorKeepAlarm;         //门磁
+    SendDataToAlarmHost(data);
+
+    data.clear();
+
+    //3、保存瞬间张力
+    //返回：16 01 设备地址 23 E8 21 1C 左1~8 右1~8 校验和
+    data[0] = 0x23;
+    data[1] = 0xE8;
+    data[2] = 0x21;
+    data[3] = 0x1C;
+
+    for (int i = 0; i < 6; i++) {//左1~6的瞬间张力
+        data[4 + (i << 1)] = HIGH(GlobalConfig::AlarmDetailInfo.InstantSampleValue[i]);
+        data[5 + (i << 1)] = LOW(GlobalConfig::AlarmDetailInfo.InstantSampleValue[i]);
+    }
+
+    //左开关量
+    data[16] = 0;
+    data[17] = 0;
+
+    //杆自身
+    data[18] = HIGH(GlobalConfig::AlarmDetailInfo.InstantSampleValue[12]);
+    data[19] = LOW(GlobalConfig::AlarmDetailInfo.InstantSampleValue[12]);
+
+
+    for (int i = 0; i < 6; i++) {//右1~6的瞬间张力
+        data[20 + (i << 1)] = HIGH(GlobalConfig::AlarmDetailInfo.InstantSampleValue[6 + i]);
+        data[21 + (i << 1)] = LOW(GlobalConfig::AlarmDetailInfo.InstantSampleValue[6 + i]);
+    }
+
+    //右开关量
+    data[32] = 0;
+    data[33] = 0;
+
+    //杆自身
+    data[34] = HIGH(GlobalConfig::AlarmDetailInfo.InstantSampleValue[12]);
+    data[35] = LOW(GlobalConfig::AlarmDetailInfo.InstantSampleValue[12]);
+
+    SendDataToAlarmHost(data);
+
+    data.clear();
+
+    //4、存静态基准
+    //返回：16 01 设备地址 23 E8 21 1D 左1~8 右1~8 校验和
+    data[0] = 0x23;
+    data[1] = 0xE8;
+    data[2] = 0x21;
+    data[3] = 0x1D;
+
+    for (int i = 0; i < 6; i++) {//左1~6的瞬间张力
+        data[4 + (i << 1)] = HIGH(GlobalConfig::AlarmDetailInfo.StaticBaseValue[i]);
+        data[5 + (i << 1)] = LOW(GlobalConfig::AlarmDetailInfo.StaticBaseValue[i]);
+    }
+
+    //左开关量
+    data[16] = 0;
+    data[17] = 0;
+
+    //杆自身
+    data[18] = HIGH(GlobalConfig::AlarmDetailInfo.StaticBaseValue[12]);
+    data[19] = LOW(GlobalConfig::AlarmDetailInfo.StaticBaseValue[12]);
+
+
+    for (int i = 0; i < 6; i++) {//右1~6的瞬间张力
+        data[20 + (i << 1)] = HIGH(GlobalConfig::AlarmDetailInfo.StaticBaseValue[6 + i]);
+        data[21 + (i << 1)] = LOW(GlobalConfig::AlarmDetailInfo.StaticBaseValue[6 + i]);
+    }
+
+    //右开关量
+    data[32] = 0;
+    data[33] = 0;
+
+    //杆自身
+    data[34] = HIGH(GlobalConfig::AlarmDetailInfo.StaticBaseValue[12]);
+    data[35] = LOW(GlobalConfig::AlarmDetailInfo.StaticBaseValue[12]);
+
+    SendDataToAlarmHost(data);
+
+    data.clear();
+
+    //5、钢丝是否剪断
+    //返回：16 01 设备地址 06 E8 04 1E [钢丝剪断左] [钢丝剪断右] [是否处于调整钢丝模式] 校验和
+    data[0] = 0x06;
+    data[1] = 0xE8;
+    data[2] = 0x04;
+    data[3] = 0x1E;
+    data[4] = HIGH(GlobalConfig::ad_chnn_wire_cut);
+    data[5] = LOW(GlobalConfig::ad_chnn_wire_cut);
+    data[6] = GlobalConfig::gl_motor_adjust_flag;
+    SendDataToAlarmHost(data);
 }

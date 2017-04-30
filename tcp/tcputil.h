@@ -48,6 +48,9 @@ private slots:
     //解析报警主机发送过来的数据包
     void slotParseMsgFromAlarmHost();
 
+    //主动发生ok数据包给报警主机用来测试网络的好坏
+    void slotCheckNetwork();
+
 private:
     static TcpUtil *instance;
 
@@ -57,6 +60,9 @@ private:
     //主动上报报警信息给报警主机
     QTcpSocket *SendAlarmMsgToAlarmHostSocket;
 
+    //主动发生ok数据包给报警主机用来测试网络的好坏
+    QTcpSocket *SendOkMsgToAlarmHostSocket;
+
     //用来发送所有网络配置信息和电机张力的相关信息给报警主机
     QTimer *SendMsgToAlarmHostTimer;
 
@@ -65,6 +71,9 @@ private:
 
     //解析报警主机发送过来的数据包
     QTimer *ParseMsgFromAlarmHostTimer;
+
+    //主动发生ok数据包给报警主机用来测试网络的好坏
+    QTimer *CheckNetworkTimer;
 };
 
 #endif // TCPUTIL_H

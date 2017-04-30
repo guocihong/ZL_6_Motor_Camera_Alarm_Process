@@ -1,5 +1,7 @@
 #include "scheduler.h"
 #include "globalconfig.h"
+#include "devicecontrolutil.h"
+#include "CommonSetting.h"
 
 Scheduler *Scheduler::instance = NULL;
 
@@ -32,18 +34,29 @@ void Scheduler::slotTaskScheduler()
         }
     }
 
-//    /* beep & alarm out */
-//    if (GlobalConfig::beep_flag) {
-//        //正在beep
-//        if (GlobalConfig::beep_timer > 0) {
-//            GlobalConfig::beep_timer--;
-//        }
+    /* beep & alarm out */
+    if (GlobalConfig::beep_flag) {
+        //正在beep
+        if (GlobalConfig::beep_timer > 0) {
+            GlobalConfig::beep_timer--;
+        }
 
-//        if (GlobalConfig::beep_timer == 0) {
-//            //蜂鸣时间到，静音
-//            quint8 beep_ctrl = 0;
-//            ioctl(GlobalConfig::fd, SET_BEEP_STATE, &beep_ctrl);
-//            GlobalConfig::beep_flag = 0;
-//        }
-//    }
+        if (GlobalConfig::beep_timer == 0) {
+            //蜂鸣时间到，静音
+            DeviceControlUtil::DisableBeep();
+            GlobalConfig::beep_flag = 0;
+        }
+    }
+
+    if (GlobalConfig::check_sample_clear_tick > 0) {
+        GlobalConfig::check_sample_clear_tick--;
+
+        if (GlobalConfig::check_sample_clear_tick == 0) {
+            GlobalConfig::is_sample_clear = 1;
+
+            CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                         "AppGlobalConfig/is_sample_clear",
+                                         QString::number(GlobalConfig::is_sample_clear));
+        }
+    }
 }

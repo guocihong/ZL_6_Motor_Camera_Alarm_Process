@@ -1,3 +1,5 @@
 /bin
 /temp
+/lib
+UpgradePackage.tar.gz
 Makefile

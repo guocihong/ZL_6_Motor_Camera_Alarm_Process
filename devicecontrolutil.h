@@ -100,6 +100,14 @@ public:
 
     static void UpdateLedStatus(quint16 alarm_state); //设置报警灯的状态
 
+    static quint8 ReadLeftSwitchAlarmState();         //读左开关量报警状态：0-报警；1-不报警
+    static quint8 ReadRightSwitchAlarmState();        //读右开关量报警状态：0-报警；1-不报警
+
+    static quint8 ReadDoorkeepAlarmState();           //读门磁报警状态：0-报警；1-不报警
+
+    static void EnableBeep();                         //警号鸣叫
+    static void DisableBeep();                        //警号静鸣
+
 private :
     static DeviceControlUtil *instance;
 

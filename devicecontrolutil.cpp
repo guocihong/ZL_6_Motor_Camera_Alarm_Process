@@ -62,7 +62,7 @@ bool DeviceControlUtil::ReadRightSwitchState()
 {
     quint8 right_switch_state;
 
-    //读左开关量拨码开关
+    //读右开关量拨码开关
     if (ioctl(DeviceControlUtil::fd, GET_RIGHT_SWITCH_STATE, &right_switch_state) < 0) {
         qDebug() << "read right switch state failed";
     } else {
@@ -82,7 +82,7 @@ bool DeviceControlUtil::ReadSelfSwitchState()
 {
     quint8 self_switch_state;
 
-    //读左开关量拨码开关
+    //读杆自身拨码开关
     if (ioctl(DeviceControlUtil::fd, GET_SELF_SWITCH_STATE, &self_switch_state) < 0) {
         qDebug() << "read self switch state failed";
     } else {
@@ -153,4 +153,37 @@ void DeviceControlUtil::DisableSubStreamCamera()
 void DeviceControlUtil::UpdateLedStatus(quint16 alarm_state)
 {
     ioctl(DeviceControlUtil::fd, SET_ALARM_LED_STATE, &alarm_state);
+}
+
+quint8 DeviceControlUtil::ReadLeftSwitchAlarmState()
+{
+    quint8 left_switch_alarm_state = 1;
+    ioctl(DeviceControlUtil::fd, GET_LEFT_SWITCH_ALARM_STATE , &left_switch_alarm_state);
+    return left_switch_alarm_state;
+}
+
+quint8 DeviceControlUtil::ReadRightSwitchAlarmState()
+{
+    quint8 right_switch_alarm_state = 1;
+    ioctl(DeviceControlUtil::fd, GET_RIGHT_SWITCH_ALARM_STATE , &right_switch_alarm_state);
+    return right_switch_alarm_state;
+}
+
+quint8 DeviceControlUtil::ReadDoorkeepAlarmState()
+{
+    quint8 doorkeep_alarm_state = 0;
+    ioctl(DeviceControlUtil::fd, GET_DOORKEEP_STATE , &doorkeep_alarm_state);
+    return doorkeep_alarm_state;
+}
+
+void DeviceControlUtil::EnableBeep()
+{
+    quint8 beep_flag = 1;
+    ioctl(DeviceControlUtil::fd, SET_BEEP_STATE , &beep_flag);
+}
+
+void DeviceControlUtil::DisableBeep()
+{
+    quint8 beep_flag = 0;
+    ioctl(DeviceControlUtil::fd, SET_BEEP_STATE , &beep_flag);
 }

@@ -1,6 +1,7 @@
 #include "tcputil.h"
 #include "globalconfig.h"
 #include <QDebug>
+#include "CommonSetting.h"
 
 TcpUtil *TcpUtil::instance = NULL;
 
@@ -19,6 +20,9 @@ void TcpUtil::Listen(void)
     //主动上报报警信息给报警主机
     SendAlarmMsgToAlarmHostSocket = new QTcpSocket(this);
 
+    //主动发生ok数据包给报警主机用来测试网络的好坏
+    SendOkMsgToAlarmHostSocket = new QTcpSocket(this);
+
     //用来发送所有网络配置信息和电机张力的相关信息给报警主机
     SendMsgToAlarmHostTimer = new QTimer(this);
     SendMsgToAlarmHostTimer->setInterval(200);
@@ -36,6 +40,12 @@ void TcpUtil::Listen(void)
     ParseMsgFromAlarmHostTimer->setInterval(200);
     connect(ParseMsgFromAlarmHostTimer,SIGNAL(timeout()),this,SLOT(slotParseMsgFromAlarmHost()));
     ParseMsgFromAlarmHostTimer->start();
+
+    //主动发生ok数据包给报警主机用来测试网络的好坏
+    CheckNetworkTimer = new QTimer(this);
+    CheckNetworkTimer->setInterval(200);
+    connect(CheckNetworkTimer,SIGNAL(timeout()),this,SLOT(slotCheckNetwork()));
+    CheckNetworkTimer->start();
 }
 
 //处理报警主机的tcp连接
@@ -51,6 +61,9 @@ void TcpUtil::slotProcessAlarmHostConnection()
         tcpHelper->Socket = RecvMsgFromAlarmHostSocket;
         GlobalConfig::TcpHelperBuffer.append(tcpHelper);
 
+        //切换工作模式为tcp模式
+//        GlobalConfig::system_mode = GlobalConfig::TcpMode;
+
         qDebug() << QString("AlarmHost connect:\n\tIP = ") +
                     RecvMsgFromAlarmHostSocket->peerAddress().toString() +
                     QString("\n\tPort = ") + QString::number(RecvMsgFromAlarmHostSocket->peerPort());
@@ -60,6 +73,8 @@ void TcpUtil::slotProcessAlarmHostConnection()
 //接收报警主机下发的所有网络配置信息和获取电机张力相关的信息
 void TcpUtil::slotRecvMsgFromAlarmHost()
 {
+    GlobalConfig::RecvAlarmHostLastMsgTime = QDateTime::currentDateTime();
+
     QTcpSocket *RecvMsgFromAlarmHostSocket = (QTcpSocket *)sender();
 
     if (RecvMsgFromAlarmHostSocket->bytesAvailable() <= 0) {
@@ -72,8 +87,10 @@ void TcpUtil::slotRecvMsgFromAlarmHost()
             tcpHelper->RecvOriginalMsgBuffer.append(RecvMsgFromAlarmHostSocket->readAll());
        }
     }
+
 }
 
+//报警主机断开连接,本设备是做为服务器,报警主机是做为客户端
 void TcpUtil::slotAlarmHostDisconnect()
 {
     QTcpSocket *RecvMsgFromAlarmHostSocket = (QTcpSocket *)sender();
@@ -90,6 +107,7 @@ void TcpUtil::slotAlarmHostDisconnect()
                 QString("\n\tPort = ") + QString::number(RecvMsgFromAlarmHostSocket->peerPort());
 }
 
+//用来发送所有网络配置信息和电机张力的相关信息给报警主机
 void TcpUtil::slotSendMsgToAlarmHost()
 {
     foreach (TcpHelper *tcpHelper, GlobalConfig::TcpHelperBuffer) {
@@ -106,11 +124,73 @@ void TcpUtil::slotSendMsgToAlarmHost()
     }
 }
 
+//用来主动上报报警信息给报警主机:tcp短连接
 void TcpUtil::slotSendAlarmMsgToAlarmHost()
 {
+    while(GlobalConfig::SendAlarmMsgToAlarmHostBuffer.size() > 0) {
+        QByteArray XmlData = GlobalConfig::SendAlarmMsgToAlarmHostBuffer.takeFirst();
 
+        SendAlarmMsgToAlarmHostSocket->connectToHost(GlobalConfig::ServerIP, GlobalConfig::ServerPort);
+        bool isConnect = SendAlarmMsgToAlarmHostSocket->waitForConnected(100);
+        if (isConnect) {
+            SendAlarmMsgToAlarmHostSocket->write(XmlData);
+//            SendAlarmMsgToAlarmHostSocket->waitForBytesWritten(3000);//不能用这个函数，服务器会存在接收不全的情况
+            CommonSetting::Sleep(300);
+            SendAlarmMsgToAlarmHostSocket->disconnectFromHost();
+            SendAlarmMsgToAlarmHostSocket->abort();
+            qDebug() << "upload alarm info succeed";
+        } else {
+            qDebug() << QString("upload alarm info failed for connect to alarm host failed:\n\tIP = ") +
+                       GlobalConfig::ServerIP + QString("\n\tPort = ") +
+                       QString::number(GlobalConfig::ServerPort);
+        }
+    }
 }
 
+//主动发生ok数据包给报警主机用来测试网络的好坏:tcp短连接
+void TcpUtil::slotCheckNetwork()
+{
+    //网络是否正常
+    bool isNetworkOnline = true;
+
+    while(GlobalConfig::SendOkMsgToAlarmHostBuffer.size() > 0) {
+        QByteArray XmlData = GlobalConfig::SendOkMsgToAlarmHostBuffer.takeFirst();
+
+        SendOkMsgToAlarmHostSocket->connectToHost(GlobalConfig::ServerIP, GlobalConfig::CheckNetworkPort);
+        bool isConnect = SendOkMsgToAlarmHostSocket->waitForConnected(100);
+        if (isConnect) {
+            SendOkMsgToAlarmHostSocket->write(XmlData);
+//            SendAlarmMsgToAlarmHostSocket->waitForBytesWritten(3000);//不能用这个函数，服务器会存在接收不全的情况
+            CommonSetting::Sleep(100);
+            SendOkMsgToAlarmHostSocket->disconnectFromHost();
+            SendOkMsgToAlarmHostSocket->abort();
+            qDebug() << "upload ok info succeed";
+        } else {
+            //网络不通，切换工作模式为RS485模式
+            GlobalConfig::RecvVaildCompletePackageFromAlarmHostBuffer.clear();
+            GlobalConfig::SendMsgToAlarmHostBuffer.clear();
+            GlobalConfig::system_mode = GlobalConfig::RS485Mode;
+
+            isNetworkOnline = false;
+            qDebug() << QString("upload ok info failed for connect to alarm host failed:\n\tIP = ") +
+                       GlobalConfig::ServerIP + QString("\n\tPort = ") +
+                       QString::number(GlobalConfig::CheckNetworkPort);
+
+            break;
+        }
+    }
+
+    //网络不通的情况下，重启网卡芯片,同时需要将之前的报警主机连接对象列表清空
+    if (!isNetworkOnline) {
+        //清空报警主机连接对象列表
+        GlobalConfig::TcpHelperBuffer.clear();
+
+        //重启网卡
+        system("/etc/init.d/ifconfig-eth0");
+    }
+}
+
+//解析报警主机发送过来的数据包
 void TcpUtil::slotParseMsgFromAlarmHost()
 {
     foreach (TcpHelper *tcpHelper, GlobalConfig::TcpHelperBuffer) {

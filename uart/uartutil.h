@@ -26,8 +26,7 @@ public:
         return instance;
     }
 
-    void Listen(void);//开启串口监听
-    void Start(void);//启动延时返回数据包给报警主机
+    void Listen(void);//开启串口232监听
 
 private slots:
     /****************与电机控制杆相关的槽函数**********************/
@@ -35,11 +34,6 @@ private slots:
     void slotRecvMsgFromMotorControl();
     void slotParseMsgFromMotorControl();
 
-
-    /****************与报警主机相关的槽函数**********************/
-    void slotSendMsgToAlarmHost();
-    void slotRecvMsgFromAlarmHost();
-    void slotParseMsgFromAlarmHost();
 private:
     static UartUtil *instance;
 
@@ -58,20 +52,6 @@ private:
 
     //电机控制杆发回来的原始数据全部都保存在这里
     QByteArray RecvOriginalMsgFromMotorControlBuffer;
-
-
-    /****************与报警主机进行通信的串口参数**********************/
-    //用来与报警主机进行通信的串口
-    QextSerialPort *AlarmHostUart;
-
-    //用来读报警主机发回来的数据包
-    QTimer *RecvMsgFromAlarmHostTimer;
-
-    //从报警主机发回来的数据包中提取出一个个完整的数据包
-    QTimer *ParseMsgFromAlarmHostTimer;
-
-    //报警主机发回来的原始数据全部都保存在这里
-    QByteArray RecvOriginalMsgFromAlarmHostBuffer;
 };
 
 #endif // UARTUTIL_H

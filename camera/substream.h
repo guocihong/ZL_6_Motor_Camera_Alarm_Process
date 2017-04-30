@@ -33,12 +33,15 @@ public slots:
 
 public:
     static QList<QImage> SubImageBuffer;
+    DeviceCameraThread *SubStreamWorkThread;
 
 private:
     static SubStream *instance;
 
     uchar *rgb_buff;
-    DeviceCameraThread *SubStreamWorkThread;
+
+    //摄像头离线后，重复初始化摄像头10次以后，还是不能成功启动摄像头，则重启系统
+    quint8 CameraOfflineCount;
 };
 
 #endif // SUBSTREAM_H

@@ -24,14 +24,17 @@ SOURCES += main.cpp \
     tcp/tcputil.cpp \
     tcp/tcphelper.cpp \
     tcp/parsealarmhosttcpmsg.cpp \
+    tcp/receivefileserver.cpp \
+    tcp/receivefilethread.cpp \
+    tcp/uploadalarmmsgtoalarmhostusingtcp.cpp \
     camera/devicecamera.cpp \
     camera/devicecamerathread.cpp \
     camera/getcamerainfo.cpp \
     camera/mainstream.cpp \
     camera/substream.cpp \
-    tcp/receivefileserver.cpp \
-    tcp/receivefilethread.cpp \
-    scheduler.cpp
+    scheduler.cpp \
+    uart/rs485msgthread.cpp \
+    tcp/checknetwork.cpp
 
 HEADERS += \
     globalconfig.h \
@@ -46,14 +49,17 @@ HEADERS += \
     tcp/tcputil.h \
     tcp/tcphelper.h \
     tcp/parsealarmhosttcpmsg.h \
+    tcp/receivefileserver.h \
+    tcp/receivefilethread.h \
+    tcp/uploadalarmmsgtoalarmhostusingtcp.h \
     camera/devicecamera.h \
     camera/devicecamerathread.h \
     camera/getcamerainfo.h \
     camera/mainstream.h \
     camera/substream.h \
-    tcp/receivefileserver.h \
-    tcp/receivefilethread.h \
-    scheduler.h
+    scheduler.h \
+    uart/rs485msgthread.h \
+    tcp/checknetwork.h
 
 
 INCLUDEPATH += /usr/local/arm_ffmpeg/include

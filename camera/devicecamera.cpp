@@ -228,12 +228,23 @@ bool DeviceCamera::ReadFrame()
     //等待摄像头采集到一桢数据
     for(;;){
         fd_set fds;
-        struct timeval tv;
         FD_ZERO(&fds);
         FD_SET(fd, &fds);
-        tv.tv_sec = 2;
+
+        struct timeval tv;
+        tv.tv_sec = 10;
         tv.tv_usec = 0;
-        int r = select(fd + 1,&fds,NULL,NULL,&tv);
+
+/*
+1、设置了timeout的值之后，select在没有文件描述符可用的情况下，会等待这个timeout的时间，时间到了select返回0
+2、如果timeout超时之前有文件描述符可用，则返回可用的数量，这时候的timeout则会依然计数，
+因此如果想要每次都超时一定的时间那么在slelect返回>0的值之后要重新装填timeout的值一次
+3、如果tv_sec和tv_usec都是0，那么就是超时时间为0，select就会立刻返回了。
+4、如果timeout这里是个NULL，那么超时就未被启用，会一直阻塞在监视文件描述符的地方
+*/
+
+        int r = select(fd + 1,&fds,NULL,NULL,&tv);//超时读
+//        int r = select(fd + 1,&fds,NULL,NULL,NULL);//阻塞读
         if(-1 == r){
             if(EINTR == errno)
                 continue;

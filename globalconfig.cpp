@@ -24,9 +24,10 @@ QString GlobalConfig::MAC = CommonSetting::ReadMacAddress();
 quint16 GlobalConfig::UdpGroupPort = 6905;
 QString GlobalConfig::UdpGroupAddr = "224.0.0.17";
 quint16 GlobalConfig::UpgradePort = 6904;
+quint16 GlobalConfig::CheckNetworkPort = 6900;
 
 /*****************报警主机下发的配置参数*********************/
-QString GlobalConfig::ServerIP = QString("192.168.1.239");
+QString GlobalConfig::ServerIP = QString("192.168.8.238");
 quint16 GlobalConfig::ServerPort = 6901;
 quint8 GlobalConfig::UseMainCamera = 1;
 QString GlobalConfig::MainDefenceID = QString("010");
@@ -42,7 +43,6 @@ quint8 GlobalConfig::ad_still_Dup[13] = {50,50,50,50,50,50,50,50,50,50,50,50,50}
 quint16 GlobalConfig::beep_during_temp = 0;
 quint8 GlobalConfig::gl_motor_channel_number = 5;
 quint8 GlobalConfig::is_motor_add_link = 0;
-quint8 GlobalConfig::is_sample_clear = 0;
 quint8 GlobalConfig::gl_reply_tick = 0;
 quint8 GlobalConfig::alarm_point_num = 4;
 
@@ -55,6 +55,10 @@ quint16 GlobalConfig::SampleHeight = 480;
 /***********************用来控制程序的状态参数***************/
 quint8 GlobalConfig::system_status = GlobalConfig::SYS_PowerON;
 quint16 GlobalConfig::gl_delay_tick = DLY_BF_GetBase;
+enum GlobalConfig::WorkMode GlobalConfig::system_mode = GlobalConfig::RS485Mode;
+QDateTime GlobalConfig::RecvAlarmHostLastMsgTime = QDateTime::currentDateTime();
+bool GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+
 
 /********************用来与电机控制杆进行串口RS232通信的buffer******************/
 QList<QByteArray> GlobalConfig::SendMsgToMotorControlBuffer = QList<QByteArray>();
@@ -77,13 +81,24 @@ quint16 GlobalConfig::ad_alarm_tick[13] = {0,0,0,0,0,0,0,0,0,0,0,0,0};
 quint8 GlobalConfig::adl_alarm_flag = 0;
 quint8 GlobalConfig::adr_alarm_flag = 0;
 quint8 GlobalConfig::zs_climb_alarm_flag = 0;
-quint8 GlobalConfig::right_climb_alarm_flag = 0;
-quint8 GlobalConfig::left_climb_alarm_flag = 0;
+quint8 GlobalConfig::alarm_out_flag = 0;
 quint8 GlobalConfig::gl_chnn_index = 0;
+quint8  GlobalConfig::beep_flag = 0;
+quint16 GlobalConfig::beep_timer = 0;
+bool GlobalConfig::isEnterAutoAdjustMotorMode = false;
+bool GlobalConfig::isEnterManualAdjustMotorMode = false;
+quint8 GlobalConfig::adjust_status = 1;
+quint8 GlobalConfig::is_sample_clear = 0;
+quint8 GlobalConfig::check_sample_clear_tick = 0;
 QString GlobalConfig::status = QString("");
+bool GlobalConfig::MainStreamStateInfo = 0;
+bool GlobalConfig::SubStreamStateInfo = 0;
+sAlarmDetailInfo GlobalConfig::AlarmDetailInfo;
 
 /************用来与报警主机进行tcp通信的buffer******************/
 QList<TcpHelper *> GlobalConfig::TcpHelperBuffer = QList<TcpHelper *>();
+QList<QByteArray> GlobalConfig::SendAlarmMsgToAlarmHostBuffer = QList<QByteArray>();
+QList<QByteArray> GlobalConfig::SendOkMsgToAlarmHostBuffer = QList<QByteArray>();
 
 GlobalConfig::GlobalConfig(QObject *parent) :
     QObject(parent)
@@ -96,6 +111,13 @@ void GlobalConfig::init(void)
     //1、读取硬件配置
     //读IP地址/RS485地址
     GlobalConfig::ip_addr = DeviceControlUtil::ReadIPAddr();
+
+    //使用8位拨码开关，地址范围为 0x00 ~ 0xFF,总线设备地址要求从0x10开始
+    if ((GlobalConfig::ip_addr < 0x10) || (GlobalConfig::ip_addr == 0xFF) ||
+        (GlobalConfig::ip_addr == 0xFE)) {
+        //设备地址必须为 0x10 ~ 0xFD 之间(含),0xFF为广播地址,0xFE表示未定义地址
+        GlobalConfig::ip_addr = CMD_ADDR_UNSOLV;
+    }
 
     //读左开关量拨码开关
     if (DeviceControlUtil::ReadLeftSwitchState()) {//拨码开关打开

@@ -1,4 +1,5 @@
 #include "devicecamerathread.h"
+#include "globalconfig.h"
 #include <QDebug>
 
 //必须加以下内容,否则编译不能通过,为了兼容C和C99标准
@@ -28,7 +29,8 @@ DeviceCameraThread::DeviceCameraThread(uchar *ptr,quint16 SampleInterval, QStrin
     this->height = height;
 
     this->Finished = false;
-    this->StopCapture = false;
+    this->StopCapture = true;
+    this->CameraOfflineCount = 0;
 
     devicecamera = new DeviceCamera(VideoName,width,height,BPP,pixelformat,this);
     if(devicecamera->OpenCamera()){
@@ -47,7 +49,10 @@ void DeviceCameraThread::run()
 {
     while(!Finished){
         while(!StopCapture){
-            ReadFrame();
+            //只有网络通的情况下，才采集视频
+            if (GlobalConfig::system_mode == GlobalConfig::TcpMode) {
+                ReadFrame();
+            }
             msleep(SampleInterval);
         }
         msleep(100);
@@ -63,9 +68,13 @@ void DeviceCameraThread::ReadFrame()
                                                QImage::Format_RGB888));
             }
         } else {//摄像头离线
-            //需要重新初始化摄像头
-            this->StopCapture = true;
-            emit signalCameraOffline();
+            CameraOfflineCount++;
+
+            if (CameraOfflineCount == 5) {
+                //需要重新初始化摄像头
+                this->StopCapture = true;
+                emit signalCameraOffline();
+            }
         }
     } else {
         this->StopCapture = true;

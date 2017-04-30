@@ -28,7 +28,9 @@ public:
     void Parse(void);//实时解析报警主机RS485发生过来的数据包
     void SendDataToAlarmHost(QByteArray data);
 
-private slots:
+    void get_alarm_detail_info();//读取报警详细信息
+
+public slots:
     void slotParseAlarmHostUartMsg(void);
 
 private:

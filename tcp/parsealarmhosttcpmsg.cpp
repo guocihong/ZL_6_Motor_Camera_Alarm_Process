@@ -33,6 +33,8 @@ void ParseAlarmHostTcpMsg::slotParseMsgFromAlarmHost()
         while(tcpHelper->RecvVaildCompleteMsgBuffer.size() > 0) {
             QByteArray data = tcpHelper->RecvVaildCompleteMsgBuffer.takeFirst();
 
+            qDebug() << data;
+
             QDomDocument dom;
             QString errorMsg;
             int errorLine, errorColumn;
@@ -70,107 +72,192 @@ void ParseAlarmHostTcpMsg::slotParseMsgFromAlarmHost()
 
                         QDomNode firstChildNode = RootElement.firstChild();//第一个子节点
                         while (!firstChildNode.isNull()) {
-                            //1、报警主机启动/暂停服务-->没什么用，主要是为了兼容智能红外
-                            if ((firstChildNode.nodeName() == "StartServices") ||
-                                    (firstChildNode.nodeName() == "StopServices")) {
+                            //1、报警主机启动/暂停服务
+                            if (firstChildNode.nodeName() == "StartServices") {
+                                //启动视频采集
+                                if (GlobalConfig::UseMainCamera) {
+                                    if (MainStream::newInstance()->MainStreamWorkThread != NULL) {
+                                            MainStream::newInstance()->MainStreamWorkThread->StopCapture = false;
+                                    }
+                                }
+
+                                if (GlobalConfig::UseSubCamera) {
+                                    if (SubStream::newInstance()->SubStreamWorkThread != NULL) {
+                                        SubStream::newInstance()->SubStreamWorkThread->StopCapture = false;
+                                    }
+                                }
+
+                                //切换工作模式为tcp模式
+                                GlobalConfig::system_mode = GlobalConfig::TcpMode;
+
+                                isReturnOK = true;
+                            }
+
+                            if (firstChildNode.nodeName() == "StopServices") {
+                                //停止视频采集
+                                if (GlobalConfig::UseMainCamera) {
+                                    if (MainStream::newInstance()->MainStreamWorkThread != NULL) {
+                                        MainStream::newInstance()->MainStreamWorkThread->StopCapture = true;
+                                    }
+                                }
+
+                                if (GlobalConfig::UseSubCamera) {
+                                    if (SubStream::newInstance()->SubStreamWorkThread != NULL) {
+                                        SubStream::newInstance()->SubStreamWorkThread->StopCapture = true;
+                                    }
+                                }
+
+                                //切换工作模式为RS485模式
+                                GlobalConfig::RecvVaildCompletePackageFromAlarmHostBuffer.clear();
+                                GlobalConfig::SendMsgToAlarmHostBuffer.clear();
+                                GlobalConfig::system_mode = GlobalConfig::RS485Mode;
+
                                 isReturnOK = true;
                             }
 
                             //2、报警主机下发网络配置信息
                             if (firstChildNode.nodeName() == "ServerIP") {
-                                GlobalConfig::ServerIP = firstChildNode.toElement().text();
-                                CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
-                                                             "AppGlobalConfig/ServerIP",
-                                                             GlobalConfig::ServerIP);
+                                QString temp = firstChildNode.toElement().text();
+
+                                if (!temp.isEmpty()) {
+                                    GlobalConfig::ServerIP = firstChildNode.toElement().text();
+                                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                                 "AppGlobalConfig/ServerIP",
+                                                                 GlobalConfig::ServerIP);
+                                }
 
                                 isReturnOK = true;
                             }
 
                             if (firstChildNode.nodeName() == "ServerPort") {
-                                GlobalConfig::ServerPort = firstChildNode.toElement().text().toUShort();
-                                CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
-                                                             "AppGlobalConfig/ServerPort",
-                                                             QString::number(GlobalConfig::ServerPort));
+                                QString temp = firstChildNode.toElement().text();
+
+                                if (!temp.isEmpty()) {
+                                    GlobalConfig::ServerPort = firstChildNode.toElement().text().toUShort();
+                                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                                 "AppGlobalConfig/ServerPort",
+                                                                 QString::number(GlobalConfig::ServerPort));
+                                }
 
                                 isReturnOK = true;
                             }
 
                             if (firstChildNode.nodeName() == "UseMainCamera") {
-                                GlobalConfig::UseMainCamera =
-                                        firstChildNode.toElement().text().toUShort();
-                                CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
-                                                             "AppGlobalConfig/UseMainCamera",
-                                                             QString::number(GlobalConfig::UseMainCamera));
+                                QString temp = firstChildNode.toElement().text();
+
+                                if (!temp.isEmpty()) {
+                                    quint8 flag = firstChildNode.toElement().text().toUShort();
+                                    if (flag != GlobalConfig::UseMainCamera) {
+                                        isSystemReboot = true;
+                                    }
+
+                                    GlobalConfig::UseMainCamera = flag;
+                                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                                 "AppGlobalConfig/UseMainCamera",
+                                                                 QString::number(GlobalConfig::UseMainCamera));
+                                }
 
                                 isReturnOK = true;
                             }
 
                             if (firstChildNode.nodeName() == "MainDefenceID") {
-                                GlobalConfig::MainDefenceID = firstChildNode.toElement().text();
-                                CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
-                                                             "AppGlobalConfig/MainDefenceID",
-                                                             GlobalConfig::MainDefenceID);
+                                QString temp = firstChildNode.toElement().text();
+
+                                if (!temp.isEmpty()) {
+                                    GlobalConfig::MainDefenceID = firstChildNode.toElement().text();
+                                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                                 "AppGlobalConfig/MainDefenceID",
+                                                                 GlobalConfig::MainDefenceID);
+                                }
 
                                 isReturnOK = true;
                             }
 
                             if (firstChildNode.nodeName() == "MainCameraSleepTime") {
-                                GlobalConfig::MainCameraSleepTime =
-                                        firstChildNode.toElement().text().toUShort();
-                                CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
-                                                             "AppGlobalConfig/MainCameraSleepTime",
-                                                             QString::number(GlobalConfig::MainCameraSleepTime));
+                                QString temp = firstChildNode.toElement().text();
+
+                                if (!temp.isEmpty()) {
+                                    GlobalConfig::MainCameraSleepTime =
+                                            firstChildNode.toElement().text().toUShort();
+                                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                                 "AppGlobalConfig/MainCameraSleepTime",
+                                                                 QString::number(GlobalConfig::MainCameraSleepTime));
+                                }
 
                                 isReturnOK = true;
                             }
 
                             if (firstChildNode.nodeName() == "UseSubCamera") {
-                                GlobalConfig::UseSubCamera =
-                                        firstChildNode.toElement().text().toUShort();
-                                CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
-                                                             "AppGlobalConfig/UseSubCamera",
-                                                             QString::number(GlobalConfig::UseSubCamera));
+                                QString temp = firstChildNode.toElement().text();
+
+                                if (!temp.isEmpty()) {
+                                    quint8 flag = firstChildNode.toElement().text().toUShort();
+                                    if (flag != GlobalConfig::UseSubCamera) {
+                                        isSystemReboot = true;
+                                    }
+
+                                    GlobalConfig::UseSubCamera = flag;
+                                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                                 "AppGlobalConfig/UseSubCamera",
+                                                                 QString::number(GlobalConfig::UseSubCamera));
+                                }
 
                                 isReturnOK = true;
                             }
 
                             if (firstChildNode.nodeName() == "SubDefenceID") {
-                                GlobalConfig::SubDefenceID =
-                                        firstChildNode.toElement().text();
-                                CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
-                                                             "AppGlobalConfig/SubDefenceID",
-                                                             GlobalConfig::SubDefenceID);
+                                QString temp = firstChildNode.toElement().text();
+
+                                if (!temp.isEmpty()) {
+                                    GlobalConfig::SubDefenceID =
+                                            firstChildNode.toElement().text();
+                                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                                 "AppGlobalConfig/SubDefenceID",
+                                                                 GlobalConfig::SubDefenceID);
+                                }
 
                                 isReturnOK = true;
                             }
 
                             if (firstChildNode.nodeName() == "SubCameraSleepTime") {
-                                GlobalConfig::SubCameraSleepTime =
-                                        firstChildNode.toElement().text().toUShort();
-                                CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
-                                                             "AppGlobalConfig/SubCameraSleepTime",
-                                                             QString::number(GlobalConfig::SubCameraSleepTime));
+                                QString temp = firstChildNode.toElement().text();
+
+                                if (!temp.isEmpty()) {
+                                    GlobalConfig::SubCameraSleepTime =
+                                            firstChildNode.toElement().text().toUShort();
+                                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                                 "AppGlobalConfig/SubCameraSleepTime",
+                                                                 QString::number(GlobalConfig::SubCameraSleepTime));
+                                }
 
                                 isReturnOK = true;
                             }
 
                             if (firstChildNode.nodeName() == "DeviceMacAddr") {
-                                GlobalConfig::DeviceMacAddr =
-                                        firstChildNode.toElement().text();
-                                CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
-                                                             "AppGlobalConfig/DeviceMacAddr",
-                                                             GlobalConfig::DeviceMacAddr);
+                                QString temp = firstChildNode.toElement().text();
+
+                                if (!temp.isEmpty()) {
+                                    GlobalConfig::DeviceMacAddr =
+                                            firstChildNode.toElement().text();
+                                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                                 "AppGlobalConfig/DeviceMacAddr",
+                                                                 GlobalConfig::DeviceMacAddr);
+                                }
 
                                 isReturnOK = true;
                                 isUpdateNetworkConfig = true;
                             }
 
                             if (firstChildNode.nodeName() == "DeviceIPAddrPrefix") {
-                                GlobalConfig::DeviceIPAddrPrefix =
-                                        firstChildNode.toElement().text();
-                                CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
-                                                             "AppGlobalConfig/DeviceIPAddrPrefix",
-                                                             GlobalConfig::DeviceIPAddrPrefix);
+                                QString temp = firstChildNode.toElement().text();
+
+                                if (!temp.isEmpty()) {
+                                    GlobalConfig::DeviceIPAddrPrefix =
+                                            firstChildNode.toElement().text();
+                                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                                 "AppGlobalConfig/DeviceIPAddrPrefix",
+                                                                 GlobalConfig::DeviceIPAddrPrefix);
+                                }
 
                                 isReturnOK = true;
                                 isUpdateNetworkConfig = true;
@@ -538,9 +625,21 @@ void ParseAlarmHostTcpMsg::ParseMotorControlCmdFromAlarmHost(QString Msg, TcpHel
     QStringList cmd = Msg.trimmed().simplified().toUpper().split(" ");
 
     if (cmd[4] == "E0") {//询问状态
-        //16 01 设备地址 01 00 校验和（该地址模块所有防区正常）
-        data[0] = 0x01;
-        data[1] = 0x00;
+        //返回1：16 01 设备地址 02 F0 01/02/03 校验和
+        //返回2：16 01 设备地址 01 00 校验和（该地址模块所有防区正常）
+        if (GlobalConfig::ip_addr == CMD_ADDR_UNSOLV) {//本设备无有效地址,只回参数应答
+            data[0] = 1;
+            data[1] = 0xF1;
+        } else {//有有效地址,回防区状态
+            if ((GlobalConfig::alarm_out_flag & 0x38) == 0x00) {//2个防区均无报警
+                data[0] = 1;
+                data[1] = 0x00;
+            } else {//有报警
+                data[0] = 2;
+                data[1] = 0xF0;
+                data[2] = (GlobalConfig::alarm_out_flag & 0x38) >> 3;
+            }
+        }
         CommonCode(data,tcpHelper);
     } else if (cmd[4] == "E1") {//询问地址
         //返回：16 01 设备地址 01 F1 校验和
@@ -776,13 +875,16 @@ void ParseAlarmHostTcpMsg::ParseMotorControlCmdFromAlarmHost(QString Msg, TcpHel
             //发送给电机控制杆
             GlobalConfig::SendMsgToMotorControlBuffer.append(MotorRunCmd);
 
-            //需要添加电机转换索引
-            ////////////////////////////////////////////////////////////////////////////////////
+            //这里必须，不然手动松紧钢丝时，静态基准和瞬间张力不能同步更新
+            GlobalConfig::gl_chnn_index = cmd[7].toUShort(&ok,16);//电机号
 
-//            GlobalConfig::gl_chnn_index = matrix_index[MotorRunCmd[7]];//电机号
+            //这几个变量只有进入实时检测阶段才会用到
+            if (GlobalConfig::system_status == GlobalConfig::SYS_CHECK) {
+                GlobalConfig::isEnterAutoAdjustMotorMode = true;
+                GlobalConfig::adjust_status = 2;
 
-            ////////////////////////////////////////////////////////////////////////////////////
-
+                GlobalConfig::isEnterManualAdjustMotorMode = true;
+            }
         } else if (cmd[6] == "F1") {//采样值清零---->消除电路上的误差
             QByteArray MotorRunCmd;
             MotorRunCmd[0] = 0x16;
@@ -809,33 +911,33 @@ void ParseAlarmHostTcpMsg::ParseMotorControlCmdFromAlarmHost(QString Msg, TcpHel
             //发送给电机控制杆
             GlobalConfig::SendMsgToMotorControlBuffer.append(MotorRunCmd);
 
-            /*
-            ////////////////////////////////////////////////////////////////////////////////////
-            //只有报警主机发出的采样值清零命令才会去检测采样值清零是否成功
-            if (ptr[0] == gl_comm_addr) {
-                temp16 = 0;
-                for (i = 0; i < 32; i++) {
-                    temp16 += ptr[6 + i];
+            /******************************************************************/
+            //1、在加级联的情况下，需要在现场通过报警主机先进行采样值恢复，然后在执行采样值清零
+            //2、生产车间进行采样值恢复和采样值清零都是通过广播模式设置
+            //3、现场通过报警主机进行采样值恢复和采样值清零是通过单播模式设置
+
+            //只有报警主机发出的采样值清零命令才生效
+            if (cmd[1].toUShort(&ok,16) == GlobalConfig::ip_addr) {//单播模式
+                quint16 sample_value_sum = 0;
+                for (int i = 0; i < 32; i++) {
+                    sample_value_sum += cmd[7 + i].toUShort(&ok,16);
                 }
 
-                if (temp16 == 0) {//采样值恢复的情况
-                    is_sample_clear = 0;
+                if (sample_value_sum == 0) {//本条命令是进行采样值恢复
+                    GlobalConfig::is_sample_clear = 0;
 
-                    flash_enable();
-                    flash_erase(EEPROM_SECTOR9);
-                    flash_write(0, EEPROM_SECTOR9 + 1);
-                    flash_write(0x5a, EEPROM_SECTOR9);
-                    flash_disable();
-                } else {//采样值清零的情况
-                    check_sample_clear_tick = 3000 / SCHEDULER_TICK;
+                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                 "AppGlobalConfig/is_sample_clear",
+                                                 QString::number(GlobalConfig::is_sample_clear));
+                } else {//本条命令是进行采样值清零
+                    GlobalConfig::check_sample_clear_tick = 3000 / SCHEDULER_TICK;
                 }
-            } else if (ptr[0] == CMD_ADDR_BC) {
-                //生产车间发出的采样值清零命令不会去检测采样值清零是否成功
+            } else if (cmd[1].toUShort(&ok,16) == CMD_ADDR_BC) {//广播模式
+                //生产车间发出的采样值清零命令不生效
                 //什么都不做
             }
 
-            ////////////////////////////////////////////////////////////////////////////////////
-                   */
+            /******************************************************************/
         } else if (cmd[6] == "F3") {//读钢丝是否剪断以及是否处于调整钢丝模式
             //返回：16 01 设备地址 06 E8 04 1E [钢丝剪断左] [钢丝剪断右] [是否处于调整钢丝模式] 校验和
             data[0] = 0x06;

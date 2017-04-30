@@ -4,43 +4,50 @@
 #include <QObject>
 #include <QMutex>
 #include <QDebug>
+#include <QDateTime>
 #include "tcp/tcphelper.h"
 
 //ZZX:  张力相关缺省参数 (单位：采样值)
-#define STD_STILL_DN          0      //张力静态值下限
-#define STD_STILL_UP          999    //张力静态值上限
+#define STD_STILL_DN          0                           //张力静态值下限
+#define STD_STILL_UP          999                         //张力静态值上限
 
+#define DEF_ModiBASE_TH  5	                              //报警状态下(连续四点超限), 允许更新基准值需要的最小变化阀值, 单位: 采样值
+#define DEF_ModiBASE_PT  6                                //缓慢拉紧时, 多少个计量点(一个计量点含多个均衡点)被连续拉紧, 用于跟踪基准值使递增1
+                                                          //  例如: 为6时, 更新周期为 6 * 0.64 = 3.9 秒	  (一个计量点含2个均衡点时)
 
 #define SCHEDULER_TICK        1000
 #define DLY_BF_GetBase        (5000 / SCHEDULER_TICK)     //基准值采样前延时，单位：tick
 #define ALARM_TEMPO           (3000 / SCHEDULER_TICK)     //报警信号持续时间
 
+#define CMD_ADDR_BC      255                              //广播地址
+#define CMD_ADDR_UNSOLV  254                              //未烧录或未正确设置的地址
+
 #define LOW(U16)              ((quint8)U16)
 #define HIGH(U16)             ((quint8)(U16>>8))
 
-#define REPLY_DLY             100
+#define REPLY_DLY             40
 
 /* AD */
 typedef struct strAD_Sum
 { //采样值累加和
-  quint16   sum;                             //累计和 (最多达64点,不会溢出)
-  quint8    point;                           //已采样点数
+  quint16   sum;                                         //累计和 (最多达64点,不会溢出)
+  quint8    point;                                       //已采样点数
 }sAD_Sum;
 
 typedef struct strAD_BASE
 { //系统运行时静态基准值对应的采样值
-  quint16   base;                            //静态基准值
-  quint16   base_down;                       //基准值下限(含)
-  quint16   base_up;                         //基准值上限(含)
+  quint16   base;                                       //静态基准值
+  quint16   base_down;                                  //基准值下限(含)
+  quint16   base_up;                                    //基准值上限(含)
 }sAD_BASE;
 
 typedef struct strAlarmDetailInfo
 {
-    quint16  InstantSampleValue[13];//瞬间张力:左1~6、右1~6、杆自身
-    quint16  StaticBaseValue[13];   //静态基准:左1~6、右1~6、杆自身
-    quint16  ExternalAlarm;         //外力报警:杆自身、左开关量、左6~左1,杆自身、右开关量、右6~右1
-    quint16  StaticAlarm;	       //静态报警:杆自身、左开关量、左6~左1,杆自身、右开关量、右6~右1
-    quint8   DoorKeepAlarm;         //门磁报警:!控制杆门磁 | 防水箱门磁
+    quint16  InstantSampleValue[13];                   //瞬间张力:左1~6、右1~6、杆自身
+    quint16  StaticBaseValue[13];                      //静态基准:左1~6、右1~6、杆自身
+    quint16  ExternalAlarm;                            //外力报警:杆自身、左开关量、左6~左1,杆自身、右开关量、右6~右1
+    quint16  StaticAlarm;	                           //静态报警:杆自身、左开关量、左6~左1,杆自身、右开关量、右6~右1
+    quint8   DoorKeepAlarm;                            //门磁报警:!控制杆门磁 | 防水箱门磁
 }sAlarmDetailInfo;
 
 class GlobalConfig : public QObject
@@ -70,6 +77,11 @@ public:
         SYS_SELF_CHECK1 = 3,     // 3 - 开机自检阶段1
         SYS_SELF_CHECK2 = 4,     // 4 - 开机自检阶段2
         SYS_CHECK = 5,           // 5 - 实时监测
+    };
+
+    enum WorkMode {
+        RS485Mode = 0,//网络不通的情况下，自动切换工作模式为RS485模式
+        TcpMode = 1//网络正常的情况下，自动切换工作模式为tcp模式
     };
 
     static void init(void);
@@ -118,6 +130,10 @@ public:
 
     //升级端口
     static quint16 UpgradePort;
+
+    //检测网络好坏端口
+    static quint16 CheckNetworkPort;
+
 
 
     /*****************报警主机下发的配置参数*********************/
@@ -169,14 +185,12 @@ public:
     //是否添加级联
     static quint8 is_motor_add_link;
 
-    //采样值是否清零
-    static quint8 is_sample_clear;
-
     //设备返回延时时间
     static quint8 gl_reply_tick;
 
     //设置报警点数
     static quint8 alarm_point_num;
+
 
 
     /**************************视频参数**************************/
@@ -190,6 +204,15 @@ public:
 
     //系统计时
     static quint16 gl_delay_tick;
+
+    //工作模式：RS485模式，网络模式
+    static enum WorkMode system_mode;
+
+    //接收到报警主机最后一次消息的时间
+    static QDateTime RecvAlarmHostLastMsgTime;
+
+    //报警主机通过RS485发送的广播命令是否需要延时返回(默认情况下，报警主机RS485广播命令不会返回，只有单播命令才会返回，但是不需要延时返回)
+    static bool isDelayResponseAlarmHostRS485BroadcastCmd;
 
 
     /********************用来与电机控制杆进行串口RS232通信的buffer******************/
@@ -235,9 +258,6 @@ public:
     //各通道报警计时tick
     static quint16 ad_alarm_tick[13];
 
-    //当前正在调整的钢丝的索引:0-11分别代表：左1~左6、右1~右6
-    static quint8 gl_chnn_index;
-
     //左侧张力组合报警标志: 0 - 无报警; 1 - 超阀值，报警
     static quint8 adl_alarm_flag;
 
@@ -247,20 +267,56 @@ public:
     //杆自身攀爬报警标志：0-无报警；1-报警
     static quint8 zs_climb_alarm_flag;
 
-    //右开关量攀爬报警标志：0-无报警；1-报警
-    static quint8 right_climb_alarm_flag;
+    //bit7-bit0分别代表:X X 杆自身攀爬报警 右防区报警 左防区报警 X X X
+    static quint8 alarm_out_flag;
 
-    //左开关量攀爬报警标志：0-无报警；1-报警
-    static quint8 left_climb_alarm_flag;
+    //当前正在调整的钢丝的索引:0-11分别代表：左1 右1 左2 右2 左3 右3 左4 右4 左5 右5 左6 右6
+    static quint8 gl_chnn_index;
+
+    //蜂鸣标志 : 0 - 禁鸣; 1 - 正在蜂鸣
+    static quint8  beep_flag;
+
+    //剩余蜂鸣时间, 单位tick
+    static quint16 beep_timer;
+
+    //是否进入自动调整钢丝模式
+    static bool isEnterAutoAdjustMotorMode;
+
+    //是否进入手动调整钢丝模式
+    static bool isEnterManualAdjustMotorMode;
+
+    //当前调整钢丝的状态
+    static quint8 adjust_status;
+
+    //采样值是否清零,这个变量只有在加级联的情况下才有用
+    static quint8 is_sample_clear;
+
+    //加级联的情况下，开机自检阶段，采样值清零成功后，需要延时一段时间，主要是同步静态基准和瞬间张力
+    static quint8 check_sample_clear_tick;
 
     //保存电机张力控制杆的实时状态详细信息
     static QString status;
+
+    //左防区摄像头状态信息：0-离线；1-在线
+    static bool MainStreamStateInfo;
+
+    //右防区摄像头状态信息:0-离线；1-在线
+    static bool SubStreamStateInfo;
+
+    //保存最后一次报警详细信息
+    static sAlarmDetailInfo AlarmDetailInfo;
 
 
 
     /************用来与报警主机进行tcp通信的buffer******************/
     //保存报警主机的所有连接对象和数据包
     static QList<TcpHelper *> TcpHelperBuffer;
+
+    //发送给报警主机的报警信息
+    static QList<QByteArray> SendAlarmMsgToAlarmHostBuffer;
+
+    //主动发生ok数据包给报警主机用来测试网络的好坏
+    static QList<QByteArray> SendOkMsgToAlarmHostBuffer;
 };
 
 #endif // GLOBALCONFIG_H
