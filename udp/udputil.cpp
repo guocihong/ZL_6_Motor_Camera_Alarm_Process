@@ -65,6 +65,8 @@ void UdpUtil::slotProcessPendingDatagrams()
                 RootElement.setAttribute("Mask",GlobalConfig::Mask);
                 RootElement.setAttribute("Gateway",GlobalConfig::Gateway);
                 RootElement.setAttribute("MAC",GlobalConfig::MAC);
+                RootElement.setAttribute("ServerIP",GlobalConfig::ServerIP);
+                RootElement.setAttribute("Ver",GlobalConfig::Version);
 
                 QString DefenceID = GlobalConfig::MainDefenceID + "|" + GlobalConfig::SubDefenceID;
                 RootElement.setAttribute("DefenceID",DefenceID);

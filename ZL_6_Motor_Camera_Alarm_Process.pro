@@ -21,20 +21,20 @@ SOURCES += main.cpp \
     uart/QextSerialPort/qextserialport.cpp \
     uart/parsealarmhostuartmsg.cpp \
     uart/parsemotorcontroluartmsg.cpp \
+    uart/rs485msgthread.cpp \
     tcp/tcputil.cpp \
     tcp/tcphelper.cpp \
     tcp/parsealarmhosttcpmsg.cpp \
     tcp/receivefileserver.cpp \
     tcp/receivefilethread.cpp \
     tcp/uploadalarmmsgtoalarmhostusingtcp.cpp \
+    tcp/checknetwork.cpp \
     camera/devicecamera.cpp \
     camera/devicecamerathread.cpp \
     camera/getcamerainfo.cpp \
     camera/mainstream.cpp \
     camera/substream.cpp \
-    scheduler.cpp \
-    uart/rs485msgthread.cpp \
-    tcp/checknetwork.cpp
+    scheduler.cpp
 
 HEADERS += \
     globalconfig.h \
@@ -46,20 +46,20 @@ HEADERS += \
     uart/QextSerialPort/qextserialport.h \
     uart/parsealarmhostuartmsg.h \
     uart/parsemotorcontroluartmsg.h \
+    uart/rs485msgthread.h \
     tcp/tcputil.h \
     tcp/tcphelper.h \
     tcp/parsealarmhosttcpmsg.h \
     tcp/receivefileserver.h \
     tcp/receivefilethread.h \
     tcp/uploadalarmmsgtoalarmhostusingtcp.h \
+    tcp/checknetwork.h \
     camera/devicecamera.h \
     camera/devicecamerathread.h \
     camera/getcamerainfo.h \
     camera/mainstream.h \
     camera/substream.h \
-    scheduler.h \
-    uart/rs485msgthread.h \
-    tcp/checknetwork.h
+    scheduler.h
 
 
 INCLUDEPATH += /usr/local/arm_ffmpeg/include

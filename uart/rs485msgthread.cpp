@@ -53,6 +53,8 @@ void RS485MsgThread::RecvMsgFromAlarmHost()
 
     QByteArray cmd = AlarmHostUart->readAll();
     RecvOriginalMsgFromAlarmHostBuffer.append(cmd);
+
+//    qDebug() << cmd.toHex();
 }
 
 void RS485MsgThread::ParseMsgFromAlarmHost()
@@ -93,44 +95,32 @@ void RS485MsgThread::ParseMsgFromAlarmHost()
                     (VaildCompletePackage[1] == GlobalConfig::ip_addr)) {//只保存广播数据包/专门发给本设备的数据包
                 GlobalConfig::RecvVaildCompletePackageFromAlarmHostBuffer.append(VaildCompletePackage);
 
-                //                qDebug() << "Recv:" << VaildCompletePackage;
+//                qDebug() << "Recv:" << VaildCompletePackage.toHex();
             }
         } else {//数据校验错误，数据包传输过程中发生错误
-            qDebug() << "data from alarm host parity error = " << VaildCompletePackage.toHex();
+            qDebug() << "RS485 data from alarm host parity error = " << VaildCompletePackage.toHex();
         }
     }
 }
 
 void RS485MsgThread::Start(void)
 {
-    qDebug() << "start = " << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss zzz");
-
-    //方法一：摄像头掉线和tcp传输都会影响时间的精准度
-//    if (GlobalConfig::system_mode == GlobalConfig::RS485Mode) {
-//        SendMsgToAlarmHostTimer->setInterval(REPLY_DLY + (GlobalConfig::ip_addr - 16) * GlobalConfig::gl_reply_tick);
-//        SendMsgToAlarmHostTimer->start();
-//    }
-
-    //方法二
-//    if (GlobalConfig::system_mode == GlobalConfig::RS485Mode) {
-//        unsigned long mSec = REPLY_DLY + (GlobalConfig::ip_addr - 16) * GlobalConfig::gl_reply_tick;
-//        struct timeval tv;
-//        tv.tv_sec = mSec / 1000;
-//        tv.tv_usec = (mSec % 1000) * 1000;
-//        int err;
-
-//        do {
-//            err = select(0,NULL,NULL,NULL,&tv);
-//        } while ((err < 0));
-
-//        this->slotSendMsgToAlarmHost();
-//    }
-
-    //有一些广播命令，需要延时返回
-    //有一些广播命令，根本就不返回
-    //所有的单播命令都会返回，并且不会延时
+    //只有读取延时，设置平均值点数和设置报警点数这三条广播命令会延时返回，报警主机其他RS485广播命令一律不会返回
     if (GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd) {
         unsigned long mSec = REPLY_DLY + (GlobalConfig::ip_addr - 16) * GlobalConfig::gl_reply_tick;
+        struct timeval tv;
+        tv.tv_sec = mSec / 1000;
+        tv.tv_usec = (mSec % 1000) * 1000;
+        int err;
+
+        do {
+            err = select(0,NULL,NULL,NULL,&tv);
+        } while ((err < 0));
+    }
+
+    //读取详细信息的7条广播/单播命令需要延时100ms返回，其他一律不需要延时返回
+    if (GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd) {
+        unsigned long mSec = 100;
         struct timeval tv;
         tv.tv_sec = mSec / 1000;
         tv.tv_usec = (mSec % 1000) * 1000;
@@ -146,10 +136,6 @@ void RS485MsgThread::Start(void)
 
 void RS485MsgThread::slotSendMsgToAlarmHost()
 {
-    qDebug() << "end = " << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss zzz");
-
-//    SendMsgToAlarmHostTimer->stop();
-
     if (GlobalConfig::SendMsgToAlarmHostBuffer.size() == 0) {
         return;
     }

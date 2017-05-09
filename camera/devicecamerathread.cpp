@@ -70,7 +70,7 @@ void DeviceCameraThread::ReadFrame()
         } else {//摄像头离线
             CameraOfflineCount++;
 
-            if (CameraOfflineCount == 5) {
+            if (CameraOfflineCount == 3) {
                 //需要重新初始化摄像头
                 this->StopCapture = true;
                 emit signalCameraOffline();

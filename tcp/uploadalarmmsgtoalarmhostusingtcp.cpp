@@ -231,7 +231,13 @@ void UploadAlarmMsgToAlarmHostUsingTcp::AlarmMsg(int id)
     if (id == 0) {//左防区图像
         QString MainImageBase64;
         if (MainStream::MainImageBuffer.size() > 0) {
-            QImage MainImageRgb888 = MainStream::MainImageBuffer.takeFirst();
+            QImage MainImageRgb888;
+
+            if (MainStream::MainImageBuffer.size() == 1) {
+                MainImageRgb888 = MainStream::MainImageBuffer.at(0);
+            } else {
+                MainImageRgb888 = MainStream::MainImageBuffer.takeFirst();
+            }
 
             QByteArray tempData;
             QBuffer tempBuffer(&tempData);
@@ -246,7 +252,13 @@ void UploadAlarmMsgToAlarmHostUsingTcp::AlarmMsg(int id)
     } else if (id == 1) {//右防区图像
         QString SubImageBase64;
         if (SubStream::SubImageBuffer.size() > 0) {
-            QImage SubImageRgb888 = SubStream::SubImageBuffer.takeFirst();
+            QImage SubImageRgb888;
+
+            if (SubStream::SubImageBuffer.size() == 1) {
+                SubImageRgb888 = SubStream::SubImageBuffer.at(0);
+            } else {
+                SubImageRgb888 = SubStream::SubImageBuffer.takeFirst();
+            }
 
             QByteArray tempData;
             QBuffer tempBuffer(&tempData);

@@ -17,7 +17,7 @@
 
 #define SCHEDULER_TICK        1000
 #define DLY_BF_GetBase        (5000 / SCHEDULER_TICK)     //基准值采样前延时，单位：tick
-#define ALARM_TEMPO           (3000 / SCHEDULER_TICK)     //报警信号持续时间
+#define ALARM_TEMPO           (15000 / SCHEDULER_TICK)     //报警信号持续时间
 
 #define CMD_ADDR_BC      255                              //广播地址
 #define CMD_ADDR_UNSOLV  254                              //未烧录或未正确设置的地址
@@ -211,8 +211,17 @@ public:
     //接收到报警主机最后一次消息的时间
     static QDateTime RecvAlarmHostLastMsgTime;
 
-    //报警主机通过RS485发送的广播命令是否需要延时返回(默认情况下，报警主机RS485广播命令不会返回，只有单播命令才会返回，但是不需要延时返回)
+    //报警主机通过RS485发送的广播命令是否需要延时返回，延时时间为根据地址来计算
+    //只有读取延时，设置平均值点数和设置报警点数这三条广播命令会延时返回，报警主机其他RS485广播命令一律不会返回
     static bool isDelayResponseAlarmHostRS485BroadcastCmd;
+
+    //报警主机通过RS485发送的单播命令是否需要延时返回，延时时间为100ms
+    //读取详细信息的7条命令需要延时返回，其他一律不需要延时返回
+    static bool isDelayResponseAlarmHostRS485UnicastCmd;
+
+    //版本号
+    static QString Version;
+
 
 
     /********************用来与电机控制杆进行串口RS232通信的buffer******************/

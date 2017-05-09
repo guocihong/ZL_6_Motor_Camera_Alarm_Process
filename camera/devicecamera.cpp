@@ -232,7 +232,7 @@ bool DeviceCamera::ReadFrame()
         FD_SET(fd, &fds);
 
         struct timeval tv;
-        tv.tv_sec = 10;
+        tv.tv_sec = 5;
         tv.tv_usec = 0;
 
 /*

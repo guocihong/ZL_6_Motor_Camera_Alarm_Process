@@ -58,6 +58,8 @@ quint16 GlobalConfig::gl_delay_tick = DLY_BF_GetBase;
 enum GlobalConfig::WorkMode GlobalConfig::system_mode = GlobalConfig::RS485Mode;
 QDateTime GlobalConfig::RecvAlarmHostLastMsgTime = QDateTime::currentDateTime();
 bool GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+bool GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = false;
+QString GlobalConfig::Version = QString("V0.2");
 
 
 /********************用来与电机控制杆进行串口RS232通信的buffer******************/

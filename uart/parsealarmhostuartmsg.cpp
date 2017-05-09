@@ -65,8 +65,9 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
             }
 
             GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+            GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = false;
 
-            if (cmd[1] == GlobalConfig::ip_addr) {//只有单播命令才返回，报警主机发送的所有广播命令一律不返回
+            if (cmd[1] == GlobalConfig::ip_addr) {//本条命令只有单播才会返回，并且不需要延时返回，广播不会返回
                 SendDataToAlarmHost(data);
             }
             break;
@@ -77,8 +78,9 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
             data[1] = 0xF1;
 
             GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+            GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = false;
 
-            if (cmd[1] == GlobalConfig::ip_addr) {//只有单播命令才返回，报警主机发送的所有广播命令一律不返回
+            if (cmd[1] == GlobalConfig::ip_addr) {//本条命令只有单播才会返回，并且不需要延时返回，广播不会返回
                 SendDataToAlarmHost(data);
             }
             break;
@@ -97,11 +99,8 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
             data[1] = 0xF4;
             data[2] = GlobalConfig::gl_reply_tick;
 
-            if (cmd[1] == CMD_ADDR_BC) {//广播命令需要延时返回
-                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = true;
-            } else if (cmd[1] == GlobalConfig::ip_addr){//单播命令不需要延时返回
-                GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
-            }
+            GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = true;
+            GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = false;
 
             SendDataToAlarmHost(data);
             break;
@@ -154,9 +153,11 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[29] = GlobalConfig::beep_during_temp * SCHEDULER_TICK / 1000;
                 data[30] = 0;
 
-                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //本条命令不管广播还是单播都需要返回
                 //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                //本条命令返回需要延时100ms，因为报警主机/生产车间是好几条命令一起发下来，不延时返回会出问题
                 GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+                GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = true;
 
                 SendDataToAlarmHost(data);
 
@@ -181,11 +182,14 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
 
                 data[10] = GlobalConfig::doorkeep_state;        //门磁
 
-                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //本条命令不管广播还是单播都需要返回
                 //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                //本条命令返回需要延时100ms，因为报警主机/生产车间是好几条命令一起发下来，不延时返回会出问题
                 GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+                GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = true;
 
                 SendDataToAlarmHost(data);
+
                 break;
 
             case 0x14://读瞬间张力
@@ -222,11 +226,14 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[34] = HIGH(GlobalConfig::ad_chn_sample[12]);
                 data[35] = LOW(GlobalConfig::ad_chn_sample[12]);
 
-                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //本条命令不管广播还是单播都需要返回
                 //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                //本条命令返回需要延时100ms，因为报警主机/生产车间是好几条命令一起发下来，不延时返回会出问题
                 GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+                GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = true;
 
                 SendDataToAlarmHost(data);
+
                 break;
 
             case 0x15://读静态张力基准
@@ -263,11 +270,14 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[34] = HIGH(GlobalConfig::ad_chn_base[12].base);
                 data[35] = LOW(GlobalConfig::ad_chn_base[12].base);
 
-                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //本条命令不管广播还是单播都需要返回
                 //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                //本条命令返回需要延时100ms，因为报警主机/生产车间是好几条命令一起发下来，不延时返回会出问题
                 GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+                GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = true;
 
                 SendDataToAlarmHost(data);
+
                 break;
 
             case 0x40://设置静态张力值范围
@@ -382,11 +392,14 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[5] = LOW(GlobalConfig::ad_chnn_wire_cut);
                 data[6] = GlobalConfig::gl_motor_adjust_flag;
 
-                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //本条命令不管广播还是单播都需要返回
                 //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                //本条命令返回需要延时100ms，因为报警主机/生产车间是好几条命令一起发下来，不延时返回会出问题
                 GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+                GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = true;
 
                 SendDataToAlarmHost(data);
+
                 break;
 
             case 0xF4://设置电机张力通道数：4道电机张力、5道电机张力、6道电机张力
@@ -405,11 +418,14 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[3] = 0x1F;
                 data[4] = GlobalConfig::gl_motor_channel_number;
 
-                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //本条命令不管广播还是单播都需要返回
                 //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                //本条命令返回需要延时100ms，因为报警主机/生产车间是好几条命令一起发下来，不延时返回会出问题
                 GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+                GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = true;
 
                 SendDataToAlarmHost(data);
+
                 break;
 
             case 0xF6://设置电机张力是否添加级联
@@ -428,18 +444,28 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 data[3] = 0x20;
                 data[4] = GlobalConfig::is_motor_add_link;
 
-                //本条命令不管广播还是单播都需要返回，但是不需要延时返回
+                //本条命令不管广播还是单播都需要返回
                 //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
+                //本条命令返回需要延时100ms，因为报警主机/生产车间是好几条命令一起发下来，不延时返回会出问题
                 GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+                GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = true;
 
                 SendDataToAlarmHost(data);
+
                 break;
 
             case 0xF8://读取详细报警信息
                 GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
+                GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = false;
 
                 //本条命令肯定是单播命令，不可能是广播命令
                 get_alarm_detail_info();
+
+                //默认情况下，报警会保持15s，如果网络是正常，主动上传报警信息后，报警会继续保持3s，然后报警恢复
+                //如果网络不通，报警主机通过RS485读取本设备的报警详细信息后，报警会立即恢复
+                for (int i = 0; i < 13; i++) {
+                    GlobalConfig::ad_alarm_tick[i] = 0;
+                }
                 break;
 
             case 0xF9://设置平均值点数-->采样多少个点求平均值
@@ -459,6 +485,8 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 } else if (cmd[1] == GlobalConfig::ip_addr){//单播命令不需要延时返回
                     GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
                 }
+
+                GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = false;
 
                 //本条命令既可以通过广播设置，也可以通过单播设置
                 //通过广播设置，需要延时返回
@@ -485,6 +513,8 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 } else if (cmd[1] == GlobalConfig::ip_addr){//单播命令不需要延时返回
                     GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
                 }
+
+                GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = false;
 
                 //本条命令既可以通过广播设置，也可以通过单播设置
                 //通过广播设置，需要延时返回

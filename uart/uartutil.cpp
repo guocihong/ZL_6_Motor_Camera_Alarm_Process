@@ -101,7 +101,7 @@ void UartUtil::slotParseMsgFromMotorControl()
         if (chk_sum == VaildCompletePackage[size - 1]) {//数据校验正确，收到一个正确的完整的数据包
             GlobalConfig::RecvVaildCompletePackageFromMotorControlBuffer.append(VaildCompletePackage);
         } else {//数据校验错误，数据包传输过程中发生错误
-            qDebug() << "data from motor control parity error = " << VaildCompletePackage.toHex();
+            qDebug() << "RS232 data from motor control parity error = " << VaildCompletePackage.toHex();
         }
     }
 }
