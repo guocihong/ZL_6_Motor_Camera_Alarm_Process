@@ -50,7 +50,7 @@ int main(int argc, char *argv[])
     UartUtil::newInstance()->Listen();
 
     //11、开启RS485线程-->实时接收和发生数据包给报警主机
-    RS485MsgThread::newInstance()->start(QThread::TimeCriticalPriority);
+    RS485MsgThread::newInstance()->start();
 
     //12、开启串口232数据解析-->实时解析电机控制杆串口232发生过来的数据包
     ParseMotorControlUartMsg::newInstance()->Parse();

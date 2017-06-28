@@ -9,8 +9,8 @@
 
 #define SAMPLE_POINT          10             //采样多少个点用来判断钢丝比较松
 #define MIN_SAMPLE_VALUE      60             //瞬间张力采样值小于这个值，就认为钢丝比较松
-#define TARGET_SAMPLE_VALUE   80            //收紧钢丝达到这个值，就认为调整结束，符合目标要求
-#define MOTOR_RUN_TIME        10             //电机运转时间，单位为秒
+#define TARGET_SAMPLE_VALUE   90             //收紧钢丝达到这个值，就认为调整结束，符合目标要求
+#define MOTOR_RUN_TIME        5              //电机运转时间，单位为秒
 #define WIRE_CUT_SAMPLE_VALUE 10             //判定钢丝被剪断时的瞬间张力采样值
 
 class ParseMotorControlUartMsg : public QObject
@@ -83,6 +83,9 @@ private:
 
     //电机控制杆门磁的状态
     quint8 gl_control_dk_status;
+
+    //连续5次检测到钢丝的瞬间采样值小于WIRE_CUT_SAMPLE_VALUE，就认为钢丝被剪断
+    quint8 ad_chnn_wire_cut_count[12];
 };
 
 #endif // PARSEMOTORCONTROLUARTMSG_H

@@ -6,6 +6,7 @@
 #include <QDebug>
 #include <QDateTime>
 #include "tcp/tcphelper.h"
+#include "CommonSetting.h"
 
 //ZZX:  张力相关缺省参数 (单位：采样值)
 #define STD_STILL_DN          0                           //张力静态值下限
@@ -17,7 +18,8 @@
 
 #define SCHEDULER_TICK        1000
 #define DLY_BF_GetBase        (5000 / SCHEDULER_TICK)     //基准值采样前延时，单位：tick
-#define ALARM_TEMPO           (15000 / SCHEDULER_TICK)     //报警信号持续时间
+#define ALARM_TEMPO           (3000 / SCHEDULER_TICK)     //报警信号持续时间
+#define CHECK_WIRE_CUT_TICK   (5000 / SCHEDULER_TICK)     //判断钢丝是否被真正剪断计时tick
 
 #define CMD_ADDR_BC      255                              //广播地址
 #define CMD_ADDR_UNSOLV  254                              //未烧录或未正确设置的地址
@@ -102,7 +104,7 @@ public:
     //bit15~bit0分别代表: 杆、左开关量、左6 ~ 1,杆、右开关量、右6 ~ 1
     static quint16 ad_sensor_mask_LR;
 
-    //bit11~bit0分别代表：右6~右1,左6~左1
+    //bit12~bit0分别代表：杆自身，右6~右1,左6~左1
     static quint16 ad_sensor_mask;
 
 
@@ -190,6 +192,9 @@ public:
 
     //设置报警点数
     static quint8 alarm_point_num;
+
+    //上传报警图片的张数
+    static quint8 AlarmImageCount;
 
 
 
@@ -288,10 +293,10 @@ public:
     //剩余蜂鸣时间, 单位tick
     static quint16 beep_timer;
 
-    //是否进入自动调整钢丝模式
+    //是否进入自动调整钢丝模式，优先级比手动调整模式低
     static bool isEnterAutoAdjustMotorMode;
 
-    //是否进入手动调整钢丝模式
+    //是否进入手动调整钢丝模式，优先级比自动调整模式高
     static bool isEnterManualAdjustMotorMode;
 
     //当前调整钢丝的状态
@@ -314,6 +319,12 @@ public:
 
     //保存最后一次报警详细信息
     static sAlarmDetailInfo AlarmDetailInfo;
+
+    //检测钢丝是否被真正剪断计时tick
+    static quint16 check_wire_cut_tick;
+
+    //是否检测钢丝是否被剪断
+    static bool isCheckWireCut;
 
 
 

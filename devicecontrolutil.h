@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QMutex>
+#include <QTimer>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
@@ -62,6 +63,11 @@
 //报警灯设置
 #define SET_ALARM_LED_STATE                _IOR(MOTOR_CAMERA_IOC_MAGIC,16,int)
 
+
+#define	WATCHDOG_IOCTL_BASE                'W'
+#define	WDIOC_KEEPALIVE                    _IOR(WATCHDOG_IOCTL_BASE, 5, int)
+#define	WDIOC_SETTIMEOUT                   _IOWR(WATCHDOG_IOCTL_BASE, 6, int)
+
 class DeviceControlUtil : public QObject
 {
     Q_OBJECT
@@ -108,11 +114,17 @@ public:
     static void EnableBeep();                         //警号鸣叫
     static void DisableBeep();                        //警号静鸣
 
+public slots:
+    void slotFeedWatchDog();
+
 private :
     static DeviceControlUtil *instance;
 
     //设备文件句柄
     static int fd;
+    int wdt_fd;
+
+    QTimer *FeedWatchDogTimer;
 };
 
 #endif // DEVICECONTROLUTIL_H

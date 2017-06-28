@@ -20,7 +20,7 @@ protected:
     void run();
 
 signals:
-    void signalCaptureFrame(QImage image);
+    void signalCaptureFrame(const QImage &image);
     void signalCameraOffline();
 
 public:
@@ -36,6 +36,8 @@ public:
 
     volatile bool Finished;
     volatile bool StopCapture;//拍照是暂停采集图片
+
+    quint8 sample_count;//采样多少张图片才保存一张
 };
 
 #endif // DeviceCameraThread_H

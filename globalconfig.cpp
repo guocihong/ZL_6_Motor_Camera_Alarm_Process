@@ -1,7 +1,6 @@
 #include "globalconfig.h"
 #include "devicecontrolutil.h"
 #include "tcp/tcphelper.h"
-#include "CommonSetting.h"
 
 GlobalConfig *GlobalConfig::instance = NULL;
 
@@ -27,7 +26,7 @@ quint16 GlobalConfig::UpgradePort = 6904;
 quint16 GlobalConfig::CheckNetworkPort = 6900;
 
 /*****************报警主机下发的配置参数*********************/
-QString GlobalConfig::ServerIP = QString("192.168.8.238");
+QString GlobalConfig::ServerIP = QString("192.168.8.239");
 quint16 GlobalConfig::ServerPort = 6901;
 quint8 GlobalConfig::UseMainCamera = 1;
 QString GlobalConfig::MainDefenceID = QString("010");
@@ -45,6 +44,7 @@ quint8 GlobalConfig::gl_motor_channel_number = 5;
 quint8 GlobalConfig::is_motor_add_link = 0;
 quint8 GlobalConfig::gl_reply_tick = 0;
 quint8 GlobalConfig::alarm_point_num = 4;
+quint8 GlobalConfig::AlarmImageCount = 1;
 
 
 /**************************视频参数**************************/
@@ -59,7 +59,7 @@ enum GlobalConfig::WorkMode GlobalConfig::system_mode = GlobalConfig::RS485Mode;
 QDateTime GlobalConfig::RecvAlarmHostLastMsgTime = QDateTime::currentDateTime();
 bool GlobalConfig::isDelayResponseAlarmHostRS485BroadcastCmd = false;
 bool GlobalConfig::isDelayResponseAlarmHostRS485UnicastCmd = false;
-QString GlobalConfig::Version = QString("V0.2");
+QString GlobalConfig::Version = QString("V10.0");
 
 
 /********************用来与电机控制杆进行串口RS232通信的buffer******************/
@@ -96,6 +96,9 @@ QString GlobalConfig::status = QString("");
 bool GlobalConfig::MainStreamStateInfo = 0;
 bool GlobalConfig::SubStreamStateInfo = 0;
 sAlarmDetailInfo GlobalConfig::AlarmDetailInfo;
+quint16 GlobalConfig::check_wire_cut_tick = 0;
+bool GlobalConfig::isCheckWireCut = true;
+
 
 /************用来与报警主机进行tcp通信的buffer******************/
 QList<TcpHelper *> GlobalConfig::TcpHelperBuffer = QList<TcpHelper *>();
@@ -135,6 +138,7 @@ void GlobalConfig::init(void)
     if (DeviceControlUtil::ReadSelfSwitchState()) {//拨码开关打开
         GlobalConfig::ad_sensor_mask_LR |= (1 << 7);
         GlobalConfig::ad_sensor_mask_LR |= (1 << 15);
+        GlobalConfig::ad_sensor_mask |= (1 << 12);
     }
 
     //读左防区拨码开关
@@ -253,6 +257,11 @@ void GlobalConfig::init(void)
         GlobalConfig::alarm_point_num =
                 CommonSetting::ReadSettings(GlobalConfig::ConfigFileName,
                                             "AppGlobalConfig/alarm_point_num").toUShort();
+
+        //上传报警图片的张数
+        GlobalConfig::AlarmImageCount =
+                CommonSetting::ReadSettings(GlobalConfig::ConfigFileName,
+                                            "AppGlobalConfig/AlarmImageCount").toUShort();
     } else {//配置文件不存在,使用默认值生成配置文件
         CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
                                      "AppGlobalConfig/ServerIP",GlobalConfig::ServerIP);
@@ -334,6 +343,10 @@ void GlobalConfig::init(void)
         CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
                                      "AppGlobalConfig/alarm_point_num",
                                      QString::number(GlobalConfig::alarm_point_num));
+
+        CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                     "AppGlobalConfig/AlarmImageCount",
+                                     QString::number(GlobalConfig::AlarmImageCount));
     }
 
     //3、根据拨码开关设置IP地址

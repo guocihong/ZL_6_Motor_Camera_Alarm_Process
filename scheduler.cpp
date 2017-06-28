@@ -34,6 +34,24 @@ void Scheduler::slotTaskScheduler()
         }
     }
 
+    if (GlobalConfig::check_wire_cut_tick > 0) {
+        GlobalConfig::check_wire_cut_tick--;
+
+        if (GlobalConfig::check_wire_cut_tick == 0) {
+            for (int i = 0; i < 12; i++) {
+                if (GlobalConfig::ad_chn_sample[i] > 10) {//钢丝没有被剪断
+                    if ((i >= 0) && (i <= 5)) {//左1~6
+                        //ad_chnn_wire_cut的bit15-bit0：X X 左6~左1、X X 右6~右1
+                        GlobalConfig::ad_chnn_wire_cut &= ~(1 << (i + 8));
+                    } else if ((i >= 6) && (i <= 11)) {//右1~6
+                        //ad_chnn_wire_cut的bit15-bit0：X X 左6~左1、X X 右6~右1
+                        GlobalConfig::ad_chnn_wire_cut &= ~(1 << (i - 6));
+                    }
+                }
+            }
+        }
+    }
+
     /* beep & alarm out */
     if (GlobalConfig::beep_flag) {
         //正在beep

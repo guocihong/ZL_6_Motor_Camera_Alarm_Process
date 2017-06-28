@@ -148,10 +148,17 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
                 //杆自身
                 data[26] = GlobalConfig::ad_still_Dup[12];
 
+                //双/单防区(0-双  1-单)
                 data[27] = 0;
+
+                //拨码地址
                 data[28] = GlobalConfig::ip_addr;
+
+                //声光报警时间
                 data[29] = GlobalConfig::beep_during_temp * SCHEDULER_TICK / 1000;
-                data[30] = 0;
+
+                //当前正在调整钢丝的索引
+                data[30] = GlobalConfig::gl_chnn_index;
 
                 //本条命令不管广播还是单播都需要返回
                 //因为生产车间测试工具发送的所有命令都是广播，但是报警主机本条命令是单播
@@ -340,11 +347,16 @@ void ParseAlarmHostUartMsg::slotParseAlarmHostUartMsg(void)
 
                 //这几个变量只有进入实时检测阶段才会用到
                 if (GlobalConfig::system_status == GlobalConfig::SYS_CHECK) {
-                    GlobalConfig::isEnterAutoAdjustMotorMode = true;
-                    GlobalConfig::adjust_status = 2;
-
+                    GlobalConfig::isEnterAutoAdjustMotorMode = false;
                     GlobalConfig::isEnterManualAdjustMotorMode = true;
+
+                    //手动调整模式下，不检测钢丝是否被剪断
+                    GlobalConfig::isCheckWireCut = false;
+
+                    qDebug() << "enter manual adjust motor mode";
+                    qDebug() << "disable check wire cut";
                 }
+
                 break;
 
             case 0xF1://采样值清零---->消除电路上的误差
@@ -599,7 +611,7 @@ void ParseAlarmHostUartMsg::get_alarm_detail_info()
     data[27] = 0;
     data[28] = GlobalConfig::ip_addr;
     data[29] = GlobalConfig::beep_during_temp * SCHEDULER_TICK / 1000;
-    data[30] = 0;
+    data[30] = GlobalConfig::gl_chnn_index;
     SendDataToAlarmHost(data);
 
     data.clear();

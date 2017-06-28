@@ -8,16 +8,16 @@
 ParseMotorControlUartMsg *ParseMotorControlUartMsg::instance = NULL;
 
 //报警点数为4,5，6,7,8时，用来判断是否发生报警
-quint8 alarm_matrix[5] = {0x0F,0x1F,0x3F,0x7F,0xFF};
+static quint8 alarm_matrix[5] = {0x0F,0x1F,0x3F,0x7F,0xFF};
 
 //0-11分别代表：左1 右1 左2 右2 左3 右3 左4 右4 左5 右5 左6 右6
-quint8 matrix_index[12] = {0, 6, 1, 7, 2, 8, 3, 9, 4, 10, 5, 11};
-
-//左1、右1、左2、右2、左3、右3、左4、右4、左5、右5
-quint8 gl_5_motor_control_code[12] = {0x02,0x01,0x01,0x02,0x02,0x01,0x01,0x02,0x01,0x02,0x01,0x02};
+static quint8 matrix_index[12] = {0, 6, 1, 7, 2, 8, 3, 9, 4, 10, 5, 11};
 
 //左1、右1、左2、右2、左3、右3、左4、右4、左5、右5、左6、右6
-quint8 gl_6_motor_control_code[12] = {0x02,0x01,0x01,0x02,0x02,0x01,0x01,0x02,0x02,0x01,0x01,0x02};
+static quint8 gl_5_motor_control_code[12] = {0x02,0x01,0x01,0x02,0x02,0x01,0x01,0x02,0x01,0x02,0x01,0x02};
+
+//左1、右1、左2、右2、左3、右3、左4、右4、左5、右5、左6、右6
+static quint8 gl_6_motor_control_code[12] = {0x02,0x01,0x01,0x02,0x02,0x01,0x01,0x02,0x02,0x01,0x01,0x02};
 
 
 ParseMotorControlUartMsg::ParseMotorControlUartMsg(QObject *parent) :
@@ -46,6 +46,7 @@ void ParseMotorControlUartMsg::Parse(void)
         gl_motor_overcur_point[i] = 0;
         gl_motor_adjust_end[i]    = 0;
         ad_chnn_state[i]          = 0;
+        ad_chnn_wire_cut_count[i] = 0;
     }
 
     GlobalConfig::zs_climb_alarm_flag    = 0;
@@ -84,6 +85,8 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
 
         //时间是否用完
         is_timeout                         = cmd[36];//0-没有;1-时间用完
+
+//        qDebug() << "msg:" << GlobalConfig::gl_chnn_index << GlobalConfig::gl_motor_adjust_flag << gl_motor_overcur_flag;
 
         //2、数据解析
         switch (GlobalConfig::system_status) {
@@ -135,8 +138,6 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
                 //状态->开机自检
                 GlobalConfig::system_status = GlobalConfig::SYS_SELF_CHECK1;
                 GlobalConfig::gl_chnn_index = 0;
-
-                qDebug() << "GlobalConfig::system_status = GlobalConfig::SYS_CHECK";
             }
             break;
 
@@ -181,7 +182,7 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
             quint8 channel_index = matrix_index[GlobalConfig::gl_chnn_index];
 
             //判断拨码开关是否打开
-            //ad_sensor_mask的bit11~bit0分别代表：右6~右1,左6~左1
+            //ad_sensor_mask的bit12~bit0分别代表：杆自身，右6~右1,左6~左1
             if ((GlobalConfig::ad_sensor_mask >> channel_index) & 0x0001) {//拨码打开
                 if (GlobalConfig::ad_chn_sample[channel_index] < TARGET_SAMPLE_VALUE) {//没有达到预定目标
                     GlobalConfig::system_status = GlobalConfig::SYS_SELF_CHECK2;
@@ -261,7 +262,7 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
 
             if (gl_motor_overcur_flag == 1) {//电机堵转
                 gl_motor_overcur_point[channel_index]++;
-                if (gl_motor_overcur_point[channel_index] >= 3) {
+                if (gl_motor_overcur_point[channel_index] >= 6) {
                     gl_motor_adjust_end[channel_index] = 1;//本道钢丝调整结束
                 }
 
@@ -295,14 +296,14 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
 
         case GlobalConfig::SYS_CHECK:
             //1、分析钢丝是否被剪断
-            for (int i = 0; i < 12; i++) {//0-12分别代表：左1~6、右1~6
-                //ad_sensor_mask的bit11~bit0分别代表：右6~右1,左6~左1
-                if ((GlobalConfig::ad_sensor_mask >> i) & 0x0001) {//拨码打开
-                    if (GlobalConfig::ad_chn_sample[i] < WIRE_CUT_SAMPLE_VALUE) {
-                        if (GlobalConfig::isEnterManualAdjustMotorMode) {
-                            //当前处于手动调整钢丝模式，这种情况下，即使瞬间张力采样值小与10，也不认为钢丝被剪断
-                            //do nothing
-                        } else {//钢丝被剪断
+            if (GlobalConfig::isCheckWireCut) {//手动调整模式下，不会检测钢丝是否被剪断，只有自动调整模式才会检测钢丝是否被剪断
+                for (int i = 0; i < 12; i++) {//0-11分别代表：左1~6、右1~6
+                    //ad_sensor_mask的bit12~bit0分别代表：杆自身，右6~右1,左6~左1
+                    if ((GlobalConfig::ad_sensor_mask >> i) & 0x0001) {//拨码打开
+                        if (GlobalConfig::ad_chn_sample[i] < WIRE_CUT_SAMPLE_VALUE) {//钢丝比较松，可能被剪断
+                            //钢丝被剪断的情况有2种
+                            //情况1：钢丝确实被真正剪断
+                            //情况2：比如演示架，拉钢丝的时候可能会导致其他钢丝的瞬间张力突然变成0.虽然现在标记为钢丝被剪断，但是等松开钢丝的时候，所有钢丝的瞬间张力会恢复，程序也会自动恢复钢丝的状态
                             if ((i >= 0) && (i <= 5)) {//左1~6
                                 //ad_chnn_wire_cut的bit15-bit0：X X 左6~左1、X X 右6~右1
                                 GlobalConfig::ad_chnn_wire_cut |= (1 << (i + 8));
@@ -310,13 +311,22 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
                                 //ad_chnn_wire_cut的bit15-bit0：X X 左6~左1、X X 右6~右1
                                 GlobalConfig::ad_chnn_wire_cut |= (1 << (i - 6));
                             }
+                        } else {//钢丝没有被剪断，属于情况2导致钢丝被误认为剪断的情况这里会恢复钢丝的状态
+                            if ((i >= 0) && (i <= 5)) {//左1~6
+                                //ad_chnn_wire_cut的bit15-bit0：X X 左6~左1、X X 右6~右1
+                                GlobalConfig::ad_chnn_wire_cut &= ~(1 << (i + 8));
+                            } else if ((i >= 6) && (i <= 11)) {//右1~6
+                                //ad_chnn_wire_cut的bit15-bit0：X X 左6~左1、X X 右6~右1
+                                GlobalConfig::ad_chnn_wire_cut &= ~(1 << (i - 6));
+                            }
                         }
                     }
                 }
             }
 
             //2、分析钢丝的松紧程度
-            if (!GlobalConfig::isEnterAutoAdjustMotorMode) {//没有进入自动调账钢丝模式
+            if ((!GlobalConfig::isEnterManualAdjustMotorMode) &&
+                    (!GlobalConfig::isEnterAutoAdjustMotorMode)) {//没有进入手动和自动调账钢丝模式
                 for (int i = 0; i < 12; i++) {
                     ad_chnn_state[i] += GlobalConfig::ad_chn_sample[i];
                 }
@@ -324,19 +334,39 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
 
                 //SAMPLE_POINT为10的情况下，控制杆平均值点数为4，大约耗时2.6s，控制杆平均值点数为8，大约耗时5.2s
                 if (ad_samp_pnum == SAMPLE_POINT) {
-                    ad_samp_pnum = 0;
+                    bool flag = false;
 
                     for (int i = 0; i < 12; i++) {
-                        quint16 sample_value = ad_chnn_state[i] / SAMPLE_POINT;
-                        if (sample_value < MIN_SAMPLE_VALUE) {//钢丝比较松，收紧钢丝
-                            GlobalConfig::isEnterAutoAdjustMotorMode = true;//进入自动调账钢丝模式
-                            GlobalConfig::adjust_status = 1;
-                            GlobalConfig::gl_chnn_index = 0;  //从左1钢丝开始
-                            break;
+                        //ad_sensor_mask的bit12~bit0分别代表：杆自身，右6~右1,左6~左1
+                        if ((GlobalConfig::ad_sensor_mask >> i) & 0x0001) {//拨码打开
+                            //用来分析钢丝的松紧程度，从0-11分别代表：左1~左6,右1~右6
+                            quint16 sample_value = ad_chnn_state[i] / SAMPLE_POINT;
+                            if (sample_value < MIN_SAMPLE_VALUE) {//钢丝比较松，收紧钢丝
+                                qDebug() << "enter auto adjust mode";
+                                GlobalConfig::isEnterAutoAdjustMotorMode = true;//进入自动调账钢丝模式
+                                GlobalConfig::adjust_status = 1;
+                                GlobalConfig::gl_chnn_index = 0;  //从左1钢丝开始
+
+                                for (int i = 0; i < 12; i++) {
+                                    gl_motor_overcur_point[i] = 0;
+                                    gl_motor_adjust_end[i]    = 0;
+                                }
+
+                                flag = true;
+                                break;
+                            }
                         }
                     }
 
+                    if (!flag) {//所有钢丝都满足要求，需要开启钢丝是否被剪断
+                        GlobalConfig::isCheckWireCut = true;
+
+//                        qDebug() << "enable check wire cut";
+                    }
+
                     //复位，清零
+                    ad_samp_pnum = 0;
+
                     for (int i = 0; i < 12; i++) {
                         ad_chnn_state[i] = 0;
                     }
@@ -347,10 +377,11 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
                 //索引转换
                 //channel_index:0-11分别代表左1~左6，右1～6
                 quint8 channel_index = matrix_index[GlobalConfig::gl_chnn_index];
+                quint8 val_sum = 0;
 
                 switch(GlobalConfig::adjust_status) {
                 case 1://分析钢丝拨码开关是否打开
-                    //ad_sensor_mask的bit11~bit0分别代表：右6~右1,左6~左1
+                    //ad_sensor_mask的bit12~bit0分别代表：杆自身，右6~右1,左6~左1
                     if ((GlobalConfig::ad_sensor_mask >> channel_index) & 0x0001) {//拨码打开
                         if ((channel_index >= 0) && (channel_index <= 5)) {//左1~左6
                             //ad_chnn_wire_cut的bit15-bit0：X X 左6~左1、X X 右6~右1
@@ -360,8 +391,18 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
                                     motor_start(GlobalConfig::gl_chnn_index);
                                     GlobalConfig::adjust_status = 2;
                                 } else {//瞬间张力符合要求，操作下一根钢丝
+                                    //本钢丝调整完成
+                                    gl_motor_adjust_end[channel_index] = 1;
+
+                                    //操作下一根钢丝
                                     GlobalConfig::gl_chnn_index++;
                                 }
+                            } else {//钢丝被剪断
+                                //本钢丝调整完成
+                                gl_motor_adjust_end[channel_index] = 1;
+
+                                //操作下一根钢丝
+                                GlobalConfig::gl_chnn_index++;
                             }
                         } else if ((channel_index >= 6) && (channel_index <= 11)) {//右1~右6
                             //ad_chnn_wire_cut的bit15-bit0：X X 左6~左1、X X 右6~右1
@@ -371,16 +412,41 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
                                     motor_start(GlobalConfig::gl_chnn_index);
                                     GlobalConfig::adjust_status = 2;
                                 } else {//瞬间张力符合要求，操作下一根钢丝
+                                    //本钢丝调整完成
+                                    gl_motor_adjust_end[channel_index] = 1;
+
+                                    //操作下一根钢丝
                                     GlobalConfig::gl_chnn_index++;
                                 }
+                            } else {//钢丝被剪断
+                                //本钢丝调整完成
+                                gl_motor_adjust_end[channel_index] = 1;
+
+                                //操作下一根钢丝
+                                GlobalConfig::gl_chnn_index++;
                             }
                         }
-                    } else {//拨码开关没有打开，操作下一根钢丝
+                    } else {//拨码没有打开，操作下一根钢丝
+                        //本钢丝调整完成
+                        gl_motor_adjust_end[channel_index] = 1;
+
+                        //操作下一根钢丝
                         GlobalConfig::gl_chnn_index++;
                     }
 
-                    if (GlobalConfig::gl_chnn_index == 12) {//所有钢丝调整完成，退出自动调整钢丝模式
+                    if (GlobalConfig::gl_chnn_index == 12) {
+                        GlobalConfig::gl_chnn_index = 0;
+                    }
+
+                    //判断所有钢丝是否调整完成
+                    for (int i = 0; i < 12; i++) {
+                        val_sum += gl_motor_adjust_end[i];
+                    }
+
+                    if (val_sum == 12) {//所有钢丝调整完成，退出自动调整钢丝模式
+                        GlobalConfig::gl_chnn_index = 0;
                         GlobalConfig::isEnterAutoAdjustMotorMode = false;
+                        qDebug() << "quit auto adjust mode";
                     }
                     break;
 
@@ -399,20 +465,25 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
                         }
 
                         if (GlobalConfig::ad_chn_sample[channel_index] >= TARGET_SAMPLE_VALUE) {//达到预定目标
-                            if (!GlobalConfig::isEnterManualAdjustMotorMode) {
-                                //停止电机
-                                motor_stop();
+                            //停止电机
+                            motor_stop();
 
-                                GlobalConfig::adjust_status = 1;
+                            GlobalConfig::adjust_status = 1;
 
-                                //操作下一根钢丝
-                                GlobalConfig::gl_chnn_index++;
-                            }
+                            //操作下一根钢丝
+                            GlobalConfig::gl_chnn_index++;
 
+                            //本钢丝调整完成
+                            gl_motor_adjust_end[channel_index] = 1;
                         }
                     }
 
-                    if (gl_motor_overcur_flag == 1) {//电机发生堵转，操作一根钢丝
+                    if (gl_motor_overcur_flag == 1) {//电机发生堵转
+                        gl_motor_overcur_point[channel_index]++;
+                        if (gl_motor_overcur_point[channel_index] >= 6) {
+                            gl_motor_adjust_end[channel_index] = 1;//本道钢丝调整结束
+                        }
+
                         GlobalConfig::adjust_status = 1;
 
                         //操作下一根钢丝
@@ -426,29 +497,94 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
                         GlobalConfig::gl_chnn_index++;
                     }
 
-                    if (GlobalConfig::gl_chnn_index == 12) {//所有钢丝调整完成，退出自动调整钢丝模式
+                    if (GlobalConfig::gl_chnn_index == 12) {
+                        GlobalConfig::gl_chnn_index = 0;
+                    }
+
+                    //判断所有钢丝是否调整完成
+                    for (int i = 0; i < 12; i++) {
+                        val_sum += gl_motor_adjust_end[i];
+                    }
+
+                    if (val_sum == 12) {//所有钢丝调整完成，退出自动调整钢丝模式
+                        GlobalConfig::gl_chnn_index = 0;
                         GlobalConfig::isEnterAutoAdjustMotorMode = false;
+                        qDebug() << "quit auto adjust mode";
                     }
 
-                    /**********************************************************/
-                    //通过报警主机发生命令控制电机运转，进入手动调整钢丝模式
-                    //当进入手动调整钢丝时，即使瞬间张力采样值小于10时，也不认为钢丝被剪断
-                    //但是当所有钢丝的瞬间张力采样值大于等于30时，退出手动调整钢丝模式
-                    //退出手动调整钢丝模式后，如果钢丝瞬间张力采样值小于10，就认为钢丝被剪断
-                    quint8 count = 0;
-                    for (int k = 0; k < 12; k++) {
-                        if (GlobalConfig::ad_chn_sample[k] >= 30) {
-                            count++;
-                        }
-                    }
-
-                    if (count == 12) {//退出手动调整钢丝模式
-                        GlobalConfig::isEnterManualAdjustMotorMode = false;
-                    }
-                    /**********************************************************/
                     break;
                 }
             }
+
+            if (GlobalConfig::isEnterManualAdjustMotorMode) {//进入手动调整模式
+                //复位，清零
+                ad_samp_pnum = 0;
+
+                for (int i = 0; i < 12; i++) {
+                    ad_chnn_state[i] = 0;
+                }
+
+                //索引转换
+                //channel_index:0-11分别代表左1~左6，右1～6
+                quint8 channel_index = matrix_index[GlobalConfig::gl_chnn_index];
+
+                if (GlobalConfig::gl_motor_adjust_flag == 1) {//电机正在运转
+                    //立即同步更新静态基准值
+                    GlobalConfig::ad_chn_base[channel_index].base = GlobalConfig::ad_chn_sample[channel_index];
+                    quint16 val_temp = GlobalConfig::ad_chn_base[channel_index].base;
+                    GlobalConfig::ad_chn_base[channel_index].base_down = (val_temp >> 1) - (val_temp >> 3) - (val_temp >> 4);
+                    if ((1023 - GlobalConfig::ad_chn_base[channel_index].base) >
+                            GlobalConfig::ad_still_Dup[channel_index]) {
+                        GlobalConfig::ad_chn_base[channel_index].base_up =
+                                GlobalConfig::ad_chn_base[channel_index].base + GlobalConfig::ad_still_Dup[channel_index];
+                    } else {
+                        GlobalConfig::ad_chn_base[channel_index].base_up = 1023;
+                    }
+                }
+
+                if (gl_motor_overcur_flag == 1) {//电机发生堵转，退出手动调整钢丝模式
+                    GlobalConfig::isEnterManualAdjustMotorMode = false;
+
+                    qDebug() << "quit manual adjust motor mode";
+                }
+
+                if (is_timeout == 1) {//时间用完，退出手动调整钢丝模式
+                    GlobalConfig::isEnterManualAdjustMotorMode = false;
+
+                    qDebug() << "quit manual adjust motor mode";
+                }
+            }
+
+
+
+            /**********************************************************/
+            //通过报警主机发生命令控制电机运转，进入手动调整钢丝模式
+            //当进入手动调整钢丝时，不会检测钢丝是否被剪断
+            //当退出手动调整钢丝模式，进入自动调整钢丝模式，当所有钢丝的瞬间采样值大于30，需要开启检测钢丝是否被剪断
+            //进入自动调整钢丝模式，如果钢丝的瞬间张力采样值小于10，就认为钢丝被剪断
+            if (GlobalConfig::isEnterAutoAdjustMotorMode && (!GlobalConfig::isCheckWireCut)) {
+                quint8 count = 0;
+                for (int k = 0; k < 12; k++) {
+                    //ad_sensor_mask的bit12~bit0分别代表：杆自身，右6~右1,左6~左1
+                    if ((GlobalConfig::ad_sensor_mask >> k) & 0x0001) {//拨码打开
+                        //瞬间张力:0-12分别代表：左1~6、右1~6、杆自身
+                        if (GlobalConfig::ad_chn_sample[k] >= 30) {
+                            count++;
+                        }
+                    } else {//拨码关闭
+                        count++;
+                    }
+                }
+
+                if (count == 12) {//开启检测钢丝是否被剪断
+                    GlobalConfig::isCheckWireCut = true;
+
+                    qDebug() << "enable check wire cut";
+                }
+            }
+            /**********************************************************/
+
+
 
             //3、解析12道钢丝是否外力报警以及静态报警-->左1~左6、右1~右6
             //解析控制杆是否外力报警，控制杆不存在静态报警
@@ -519,12 +655,14 @@ void ParseMotorControlUartMsg::slotParseMotorControltUartMsg(void)
                 //连续6点超范围，此通道有外力报警
                 if ((ad_chn_over[i] & alarm_matrix[GlobalConfig::alarm_point_num - 4]) ==
                         alarm_matrix[GlobalConfig::alarm_point_num - 4]) {
-                    //先保存报警详细信息，然后再更新静态基准值，这样就可以很好的分析出为什么报警
-                    for (int j = 0; j < 13; j++) {
-                        GlobalConfig::AlarmDetailInfo.StaticBaseValue[j] = GlobalConfig::ad_chn_base[j].base;
-                        GlobalConfig::AlarmDetailInfo.InstantSampleValue[j] = GlobalConfig::ad_chn_sample[j];
+                    //ad_sensor_mask的bit12~bit0分别代表：杆自身，右6~右1,左6~左1
+                    if ((GlobalConfig::ad_sensor_mask >> i) & 0x0001) {//拨码打开
+                        //先保存报警详细信息，然后再更新静态基准值，这样就可以很好的分析出为什么报警
+                        for (int j = 0; j < 13; j++) {
+                            GlobalConfig::AlarmDetailInfo.StaticBaseValue[j] = GlobalConfig::ad_chn_base[j].base;
+                            GlobalConfig::AlarmDetailInfo.InstantSampleValue[j] = GlobalConfig::ad_chn_sample[j];
+                        }
                     }
-
 
                     if ((i >= 0) && (i <= 5)) {//左1~左6
                         //超出允许范围，置标志
@@ -770,7 +908,7 @@ void ParseMotorControlUartMsg::motor_start(quint8 index)
     } else if (GlobalConfig::gl_motor_channel_number == 6) {
         MotorRunCmd[8] = gl_6_motor_control_code[index];          //正转
     }
-    MotorRunCmd[9] = MOTOR_RUN_TIME;         //运转时间10s
+    MotorRunCmd[9] = MOTOR_RUN_TIME;         //运转时间
 
     //计算校验和
     quint8 check_parity_sum = 0;

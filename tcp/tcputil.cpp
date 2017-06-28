@@ -142,9 +142,9 @@ void TcpUtil::slotSendAlarmMsgToAlarmHost()
 
             //默认情况下，报警会保持15s，如果网络是正常，主动上传报警信息后，报警会继续保持3s，然后报警恢复
             //如果网络不通，报警主机通过RS485读取本设备的报警详细信息后，报警会立即恢复
-            for (int i = 0; i < 13; i++) {
-                GlobalConfig::ad_alarm_tick[i] = 3000 / SCHEDULER_TICK;
-            }
+//            for (int i = 0; i < 13; i++) {
+//                GlobalConfig::ad_alarm_tick[i] = 3000 / SCHEDULER_TICK;
+//            }
         } else {
             qDebug() << QString("upload alarm info failed for connect to alarm host failed:\n\tIP = ") +
                        GlobalConfig::ServerIP + QString("\n\tPort = ") +
@@ -170,7 +170,7 @@ void TcpUtil::slotCheckNetwork()
             CommonSetting::Sleep(100);
             SendOkMsgToAlarmHostSocket->disconnectFromHost();
             SendOkMsgToAlarmHostSocket->abort();
-            qDebug() << "upload ok info succeed";
+//            qDebug() << "upload ok info succeed";
         } else {
             //网络不通，切换工作模式为RS485模式
             GlobalConfig::RecvVaildCompletePackageFromAlarmHostBuffer.clear();

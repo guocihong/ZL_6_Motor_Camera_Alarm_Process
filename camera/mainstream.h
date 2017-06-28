@@ -28,11 +28,13 @@ public:
     void Start();
 
 public slots:
-    void slotCaptureFrame(QImage image);
+    void slotCaptureFrame(const QImage &image);
     void slotReInitCamera();
 
 public:
-    static QList<QImage> MainImageBuffer;
+    static QList<QByteArray> MainImageBuffer;
+    static QList<QString> TriggerTimeBuffer;
+
     DeviceCameraThread *MainStreamWorkThread;
 
 private:

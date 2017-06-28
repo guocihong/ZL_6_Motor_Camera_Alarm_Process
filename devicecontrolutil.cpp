@@ -9,11 +9,26 @@ DeviceControlUtil::DeviceControlUtil(QObject *parent) :
 {
     DeviceControlUtil::fd = open(DEVICE_NAME, O_RDWR);
     if (DeviceControlUtil::fd == -1) {
-        qDebug() << QString("open %1 failed and exit the program").arg(DEVICE_NAME);
-        exit(-1);
+        qDebug() << QString("open %1 failed").arg(DEVICE_NAME);
     } else {
         qDebug() << QString("open %1 succeed").arg(DEVICE_NAME);
     }
+
+    //开启看门狗
+    wdt_fd = open("/dev/watchdog",O_RDWR);
+    if(wdt_fd == -1){
+        qDebug() << QString("open /dev/watchdog failed");
+    } else {
+        qDebug() << QString("open /dev/watchdog succeed");
+    }
+
+    //设置看门狗超时时间
+    ioctl(wdt_fd,WDIOC_SETTIMEOUT,10);
+
+    FeedWatchDogTimer = new QTimer(this);
+    FeedWatchDogTimer->setInterval(5 * 1000);
+    connect(FeedWatchDogTimer,SIGNAL(timeout()),this,SLOT(slotFeedWatchDog()));
+    FeedWatchDogTimer->start();
 }
 
 
@@ -186,4 +201,10 @@ void DeviceControlUtil::DisableBeep()
 {
     quint8 beep_flag = 0;
     ioctl(DeviceControlUtil::fd, SET_BEEP_STATE , &beep_flag);
+}
+
+
+void DeviceControlUtil::slotFeedWatchDog()
+{
+    ioctl(wdt_fd,WDIOC_KEEPALIVE);
 }

@@ -27,11 +27,13 @@ public:
 
     void Listen();
 
-    void AlarmMsg(int id);
+    void AlarmMsg(int id, int index);
     void CameraStatusInfo(int id, QString CameraStatusInfo);
     QString GetAlarmDetailInfo();
 
     QString CommonCode(QByteArray data);
+
+    void UploadStressAlarmMsg(int id, int index);//上传受力杆报警信息
 
 public slots:
     void slotUploadAlarmMsgToAlarmHost();

@@ -32,6 +32,8 @@ DeviceCameraThread::DeviceCameraThread(uchar *ptr,quint16 SampleInterval, QStrin
     this->StopCapture = true;
     this->CameraOfflineCount = 0;
 
+    this->sample_count = 0;
+
     devicecamera = new DeviceCamera(VideoName,width,height,BPP,pixelformat,this);
     if(devicecamera->OpenCamera()){
         if(devicecamera->InitCameraDevice()){
@@ -51,7 +53,12 @@ void DeviceCameraThread::run()
         while(!StopCapture){
             //只有网络通的情况下，才采集视频
             if (GlobalConfig::system_mode == GlobalConfig::TcpMode) {
+//                QTime time;
+//                time.start();
+
                 ReadFrame();
+
+//                qDebug() << this->VideoName << " readframe = " << time.elapsed();
             }
             msleep(SampleInterval);
         }
@@ -64,8 +71,16 @@ void DeviceCameraThread::ReadFrame()
     if (isValidInitCamera) {
         if(devicecamera->ReadFrame()){
             if(YUYVToRGB24_FFmpeg(devicecamera->yuyv_buff, rgb_buff)){
-                emit signalCaptureFrame(QImage(rgb_buff,width,height,
-                                               QImage::Format_RGB888));
+                sample_count++;
+
+                if (sample_count == (1000 / SampleInterval)) {//采样多张才保存一张
+                    emit signalCaptureFrame(QImage(rgb_buff,width,height,
+                                                   QImage::Format_RGB888));
+
+                    sample_count = 0;
+
+//                    qDebug() << this->VideoName << CommonSetting::GetCurrentDateTimeNoSpace();
+                }
             }
         } else {//摄像头离线
             CameraOfflineCount++;

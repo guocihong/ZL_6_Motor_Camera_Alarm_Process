@@ -1,7 +1,8 @@
 #include "parsealarmhosttcpmsg.h"
-#include "CommonSetting.h"
 #include "camera/mainstream.h"
 #include "camera/substream.h"
+#include "uploadalarmmsgtoalarmhostusingtcp.h"
+#include "CommonSetting.h"
 
 ParseAlarmHostTcpMsg *ParseAlarmHostTcpMsg::instance = NULL;
 
@@ -33,7 +34,7 @@ void ParseAlarmHostTcpMsg::slotParseMsgFromAlarmHost()
         while(tcpHelper->RecvVaildCompleteMsgBuffer.size() > 0) {
             QByteArray data = tcpHelper->RecvVaildCompleteMsgBuffer.takeFirst();
 
-            qDebug() << data;
+//            qDebug() << data;
 
             QDomDocument dom;
             QString errorMsg;
@@ -263,6 +264,20 @@ void ParseAlarmHostTcpMsg::slotParseMsgFromAlarmHost()
                                 isUpdateNetworkConfig = true;
                             }
 
+                            if (firstChildNode.nodeName() == "AlarmImageCount") {
+                                QString temp = firstChildNode.toElement().text();
+
+                                if (!temp.isEmpty()) {
+                                    GlobalConfig::AlarmImageCount =
+                                            firstChildNode.toElement().text().toUShort();
+                                    CommonSetting::WriteSettings(GlobalConfig::ConfigFileName,
+                                                                 "AppGlobalConfig/AlarmImageCount",
+                                                                 QString::number(GlobalConfig::AlarmImageCount));
+                                }
+
+                                isReturnOK = true;
+                            }
+
                             //3、报警主机获取网络配置信息
                             if (firstChildNode.nodeName() == "GetDeviceConfig") {
                                 isReturnConfigInfo = true;
@@ -294,6 +309,52 @@ void ParseAlarmHostTcpMsg::slotParseMsgFromAlarmHost()
                                 isReturnOK = true;
                                 isSystemReboot = true;
                             }
+
+                            //9、报警主机通知控制杆报警-->主要是受力杆报警时上传报警图片
+                            if (firstChildNode.nodeName() == "GetAlarmImage") {
+                                quint8 id = firstChildNode.toElement().attributeNode("id").value().toUInt();
+
+                                if (id == 0) {//左防区
+                                    //摄像头停止采集
+                                    if (GlobalConfig::UseMainCamera) {
+                                        if (MainStream::newInstance()->MainStreamWorkThread != NULL) {
+                                            MainStream::newInstance()->MainStreamWorkThread->StopCapture = true;
+                                        }
+                                    }
+
+                                    //上传报警信息
+                                    for (int i = (10 - 1); i >= (10 - GlobalConfig::AlarmImageCount); i--) {
+                                        UploadAlarmMsgToAlarmHostUsingTcp::newInstance()->UploadStressAlarmMsg(0,i);
+                                    }
+
+                                    //摄像头恢复采集
+                                    if (GlobalConfig::UseMainCamera) {
+                                        if (MainStream::newInstance()->MainStreamWorkThread != NULL) {
+                                            MainStream::newInstance()->MainStreamWorkThread->StopCapture = false;
+                                        }
+                                    }
+                                } else if (id == 1) {//右防区
+                                    //摄像头停止采集
+                                    if (GlobalConfig::UseSubCamera) {
+                                        if (SubStream::newInstance()->SubStreamWorkThread != NULL) {
+                                            SubStream::newInstance()->SubStreamWorkThread->StopCapture = true;
+                                        }
+                                    }
+
+                                    //上传报警信息
+                                    for (int i = (10 - 1); i >= (10 - GlobalConfig::AlarmImageCount); i--) {
+                                        UploadAlarmMsgToAlarmHostUsingTcp::newInstance()->UploadStressAlarmMsg(1,i);
+                                    }
+
+                                    //摄像头恢复采集
+                                    if (GlobalConfig::UseSubCamera) {
+                                        if (SubStream::newInstance()->SubStreamWorkThread != NULL) {
+                                            SubStream::newInstance()->SubStreamWorkThread->StopCapture = false;
+                                        }
+                                    }
+                                }
+                            }
+
                             firstChildNode = firstChildNode.nextSibling();//下一个节点
                         }
 
@@ -447,6 +508,13 @@ void ParseAlarmHostTcpMsg::SendConfigInfoToAlarmHost(TcpHelper *tcpHelper)
     DeviceIPAddrPrefix.appendChild(DeviceIPAddrPrefixText);
     RootElement.appendChild(DeviceIPAddrPrefix);
 
+    //创建AlarmImageCount元素
+    QDomElement AlarmImageCount = AckDom.createElement("AlarmImageCount");
+    QDomText AlarmImageCountText =
+            AckDom.createTextNode(QString::number(GlobalConfig::AlarmImageCount));
+    AlarmImageCount.appendChild(AlarmImageCountText);
+    RootElement.appendChild(AlarmImageCount);
+
     QTextStream Out(&MessageMerge);
     AckDom.save(Out,4);
 
@@ -481,18 +549,13 @@ void ParseAlarmHostTcpMsg::SendDoubleImageToAlarmHost(TcpHelper *tcpHelper)
 
     QString MainImageBase64;
     if (MainStream::MainImageBuffer.size() > 0) {
-        QImage MainImageRgb888;
+//        QImage MainImageRgb888 = MainStream::MainImageBuffer.last();
+//        QByteArray tempData;
+//        QBuffer tempBuffer(&tempData);
+//        MainImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
+//        MainImageBase64 = QString(tempData.toBase64());
 
-        if (MainStream::MainImageBuffer.size() == 1) {
-            MainImageRgb888 = MainStream::MainImageBuffer.at(0);
-        } else {
-            MainImageRgb888 = MainStream::MainImageBuffer.takeFirst();
-        }
-
-        QByteArray tempData;
-        QBuffer tempBuffer(&tempData);
-        MainImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
-        MainImageBase64 = QString(tempData.toBase64());
+        MainImageBase64 = QString(MainStream::MainImageBuffer.last());
     } else {
         MainImageBase64 = QString("");
     }
@@ -507,18 +570,12 @@ void ParseAlarmHostTcpMsg::SendDoubleImageToAlarmHost(TcpHelper *tcpHelper)
 
     QString SubImageBase64;
     if (SubStream::SubImageBuffer.size() > 0) {
-        QImage SubImageRgb888;
-
-        if (SubStream::SubImageBuffer.size() == 1) {
-            SubImageRgb888 = SubStream::SubImageBuffer.at(0);
-        } else {
-            SubImageRgb888 = SubStream::SubImageBuffer.takeFirst();
-        }
-
-        QByteArray tempData;
-        QBuffer tempBuffer(&tempData);
-        SubImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
-        SubImageBase64 = QString(tempData.toBase64());
+//        QImage SubImageRgb888 = SubStream::SubImageBuffer.last();
+//        QByteArray tempData;
+//        QBuffer tempBuffer(&tempData);
+//        SubImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
+//        SubImageBase64 = QString(tempData.toBase64());
+        SubImageBase64 = QString(SubStream::SubImageBuffer.last());
     } else {
         SubImageBase64 = QString("");
     }
@@ -560,18 +617,13 @@ void ParseAlarmHostTcpMsg::SendLeftAreaImageToAlarmHost(TcpHelper *tcpHelper)
 
     QString MainImageBase64;
     if (MainStream::MainImageBuffer.size() > 0) {
-        QImage MainImageRgb888;
+//        QImage MainImageRgb888 = MainStream::MainImageBuffer.last();
+//        QByteArray tempData;
+//        QBuffer tempBuffer(&tempData);
+//        MainImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
+//        MainImageBase64 = QString(tempData.toBase64());
 
-        if (MainStream::MainImageBuffer.size() == 1) {
-            MainImageRgb888 = MainStream::MainImageBuffer.at(0);
-        } else {
-            MainImageRgb888 = MainStream::MainImageBuffer.takeFirst();
-        }
-
-        QByteArray tempData;
-        QBuffer tempBuffer(&tempData);
-        MainImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
-        MainImageBase64 = QString(tempData.toBase64());
+        MainImageBase64 = QString(MainStream::MainImageBuffer.last());
     } else {
         MainImageBase64 = QString("");
     }
@@ -613,18 +665,13 @@ void ParseAlarmHostTcpMsg::SendRightAreaImageToAlarmHost(TcpHelper *tcpHelper)
 
     QString SubImageBase64;
     if (SubStream::SubImageBuffer.size() > 0) {
-        QImage SubImageRgb888;
+//        QImage SubImageRgb888 = SubStream::SubImageBuffer.last();
+//        QByteArray tempData;
+//        QBuffer tempBuffer(&tempData);
+//        SubImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
+//        SubImageBase64 = QString(tempData.toBase64());
 
-        if (SubStream::SubImageBuffer.size() == 1) {
-            SubImageRgb888 = SubStream::SubImageBuffer.at(0);
-        } else {
-            SubImageRgb888 = SubStream::SubImageBuffer.takeFirst();
-        }
-
-        QByteArray tempData;
-        QBuffer tempBuffer(&tempData);
-        SubImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
-        SubImageBase64 = QString(tempData.toBase64());
+        SubImageBase64 = QString(SubStream::SubImageBuffer.last());
     } else {
         SubImageBase64 = QString("");
     }
@@ -726,10 +773,17 @@ void ParseAlarmHostTcpMsg::ParseMotorControlCmdFromAlarmHost(QString Msg, TcpHel
             //杆自身
             data[26] = GlobalConfig::ad_still_Dup[12];
 
+            //双/单防区(0-双  1-单)
             data[27] = 0;
+
+            //拨码地址
             data[28] = GlobalConfig::ip_addr;
+
+            //声光报警时间
             data[29] = GlobalConfig::beep_during_temp * SCHEDULER_TICK / 1000;
-            data[30] = 0;
+
+            //当前正在调整钢丝的索引
+            data[30] = GlobalConfig::gl_chnn_index;
             CommonCode(data,tcpHelper);
         } else if (cmd[6] == "12") {//读报警信息
             //返回：16 01 设备地址 0A E8 08 1A  [张力掩码左] [张力掩码右] [外力报警左]  [外力报警右]
@@ -904,10 +958,14 @@ void ParseAlarmHostTcpMsg::ParseMotorControlCmdFromAlarmHost(QString Msg, TcpHel
 
             //这几个变量只有进入实时检测阶段才会用到
             if (GlobalConfig::system_status == GlobalConfig::SYS_CHECK) {
-                GlobalConfig::isEnterAutoAdjustMotorMode = true;
-                GlobalConfig::adjust_status = 2;
-
+                GlobalConfig::isEnterAutoAdjustMotorMode = false;
                 GlobalConfig::isEnterManualAdjustMotorMode = true;
+
+                //手动调整模式下，不检测钢丝是否被剪断
+                GlobalConfig::isCheckWireCut = false;
+
+                qDebug() << "enter manual adjust motor mode";
+                qDebug() << "disable check wire cut";
             }
         } else if (cmd[6] == "F1") {//采样值清零---->消除电路上的误差
             QByteArray MotorRunCmd;
@@ -1170,7 +1228,7 @@ void ParseAlarmHostTcpMsg::SaveMotorLastestStatusInfo()
                             0,                              //双/单防区
                             GlobalConfig::ip_addr,          //拨码地址
                             GlobalConfig::beep_during_temp * SCHEDULER_TICK / 1000, //声光报警输出时间
-                            0                               //联动输出时间
+                            GlobalConfig::gl_chnn_index                               //联动输出时间
                            };
 
     //计算检验和

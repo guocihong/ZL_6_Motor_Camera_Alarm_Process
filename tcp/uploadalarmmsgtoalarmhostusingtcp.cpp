@@ -35,8 +35,41 @@ void UploadAlarmMsgToAlarmHostUsingTcp::slotUploadAlarmMsgToAlarmHost()
     if (temp8 != 0) {//发生报警
         if (temp8 != PreDoorKeepState) {//新报警
             PreDoorKeepState = temp8;//保存上一次报警状态,每次报警只上传一次报警信息
-            AlarmMsg(0);
-            AlarmMsg(1);
+
+            //摄像头停止采集
+            if (GlobalConfig::UseMainCamera) {
+                if (MainStream::newInstance()->MainStreamWorkThread != NULL) {
+                    MainStream::newInstance()->MainStreamWorkThread->StopCapture = true;
+                }
+            }
+
+            if (GlobalConfig::UseSubCamera) {
+                if (SubStream::newInstance()->SubStreamWorkThread != NULL) {
+                    SubStream::newInstance()->SubStreamWorkThread->StopCapture = true;
+                }
+            }
+
+            //上传报警信息
+            for (int i = (10 - 1); i >= (10 - GlobalConfig::AlarmImageCount); i--) {
+                AlarmMsg(0,i);
+            }
+
+            for (int i = (10 - 1); i >= (10 - GlobalConfig::AlarmImageCount); i--) {
+                AlarmMsg(1,i);
+            }
+
+            //摄像头恢复采集
+            if (GlobalConfig::UseMainCamera) {
+                if (MainStream::newInstance()->MainStreamWorkThread != NULL) {
+                    MainStream::newInstance()->MainStreamWorkThread->StopCapture = false;
+                }
+            }
+
+            if (GlobalConfig::UseSubCamera) {
+                if (SubStream::newInstance()->SubStreamWorkThread != NULL) {
+                    SubStream::newInstance()->SubStreamWorkThread->StopCapture = false;
+                }
+            }
         }
     } else {//没有发生报警
         PreDoorKeepState = temp8;
@@ -48,8 +81,41 @@ void UploadAlarmMsgToAlarmHostUsingTcp::slotUploadAlarmMsgToAlarmHost()
     if (temp8 != 0) {//发生报警
         if (temp8 != PreConrolState) {//新报警
             PreConrolState = temp8;//保存上一次报警状态,每次报警只上传一次报警信息
-            AlarmMsg(0);
-            AlarmMsg(1);
+
+            //摄像头停止采集
+            if (GlobalConfig::UseMainCamera) {
+                if (MainStream::newInstance()->MainStreamWorkThread != NULL) {
+                    MainStream::newInstance()->MainStreamWorkThread->StopCapture = true;
+                }
+            }
+
+            if (GlobalConfig::UseSubCamera) {
+                if (SubStream::newInstance()->SubStreamWorkThread != NULL) {
+                    SubStream::newInstance()->SubStreamWorkThread->StopCapture = true;
+                }
+            }
+
+            //上传报警信息
+            for (int i = (10 - 1); i >= (10 - GlobalConfig::AlarmImageCount); i--) {
+                AlarmMsg(0,i);
+            }
+
+            for (int i = (10 - 1); i >= (10 - GlobalConfig::AlarmImageCount); i--) {
+                AlarmMsg(1,i);
+            }
+
+            //摄像头恢复采集
+            if (GlobalConfig::UseMainCamera) {
+                if (MainStream::newInstance()->MainStreamWorkThread != NULL) {
+                    MainStream::newInstance()->MainStreamWorkThread->StopCapture = false;
+                }
+            }
+
+            if (GlobalConfig::UseSubCamera) {
+                if (SubStream::newInstance()->SubStreamWorkThread != NULL) {
+                    SubStream::newInstance()->SubStreamWorkThread->StopCapture = false;
+                }
+            }
         }
     } else {//没有发生报警
         PreConrolState = temp8;
@@ -61,7 +127,25 @@ void UploadAlarmMsgToAlarmHostUsingTcp::slotUploadAlarmMsgToAlarmHost()
     if (temp8 != 0) {//发生报警
         if (temp8 != PreLeftAreaState) {//新报警
             PreLeftAreaState = temp8;//保存上一次报警状态,每次报警只上传一次报警信息
-            AlarmMsg(0);
+
+            //摄像头停止采集
+            if (GlobalConfig::UseMainCamera) {
+                if (MainStream::newInstance()->MainStreamWorkThread != NULL) {
+                    MainStream::newInstance()->MainStreamWorkThread->StopCapture = true;
+                }
+            }
+
+            //上传报警信息
+            for (int i = (10 - 1); i >= (10 - GlobalConfig::AlarmImageCount); i--) {
+                AlarmMsg(0,i);
+            }
+
+            //摄像头恢复采集
+            if (GlobalConfig::UseMainCamera) {
+                if (MainStream::newInstance()->MainStreamWorkThread != NULL) {
+                    MainStream::newInstance()->MainStreamWorkThread->StopCapture = false;
+                }
+            }
         }
     } else {//没有发生报警
         PreLeftAreaState = temp8;
@@ -73,8 +157,25 @@ void UploadAlarmMsgToAlarmHostUsingTcp::slotUploadAlarmMsgToAlarmHost()
     if (temp8 != 0) {//发生报警
         if (temp8 != PreRightAreaState) {//新报警
             PreRightAreaState = temp8;//保存上一次报警状态,每次报警只上传一次报警信息
-            AlarmMsg(1);
-        }
+
+            //摄像头停止采集
+            if (GlobalConfig::UseSubCamera) {
+                if (SubStream::newInstance()->SubStreamWorkThread != NULL) {
+                    SubStream::newInstance()->SubStreamWorkThread->StopCapture = true;
+                }
+            }
+
+            //上传报警信息
+            for (int i = (10 - 1); i >= (10 - GlobalConfig::AlarmImageCount); i--) {
+                AlarmMsg(1,i);
+            }
+
+            //摄像头恢复采集
+            if (GlobalConfig::UseSubCamera) {
+                if (SubStream::newInstance()->SubStreamWorkThread != NULL) {
+                    SubStream::newInstance()->SubStreamWorkThread->StopCapture = false;
+                }
+            }        }
     } else {//没有发生报警
         PreRightAreaState = temp8;
     }
@@ -110,7 +211,7 @@ void UploadAlarmMsgToAlarmHostUsingTcp::slotUploadAlarmMsgToAlarmHost()
     }
 }
 
-void UploadAlarmMsgToAlarmHostUsingTcp::AlarmMsg(int id)
+void UploadAlarmMsgToAlarmHostUsingTcp::AlarmMsg(int id,int index)
 {
     //1、获取最后一次报警时的详细信息
     QString AlarmDetailInfo = GetAlarmDetailInfo();
@@ -229,20 +330,36 @@ void UploadAlarmMsgToAlarmHostUsingTcp::AlarmMsg(int id)
     }
 
     if (id == 0) {//左防区图像
+        if (MainStream::TriggerTimeBuffer.size() > 0) {
+            if (MainStream::TriggerTimeBuffer.size() < index) {
+                DeviceAlarmImage.setAttribute("triggertime", MainStream::TriggerTimeBuffer.at(0));
+            } else {
+                DeviceAlarmImage.setAttribute("triggertime", MainStream::TriggerTimeBuffer.at(index));
+            }
+        } else {
+            DeviceAlarmImage.setAttribute("triggertime", QString(""));
+        }
+
         QString MainImageBase64;
         if (MainStream::MainImageBuffer.size() > 0) {
-            QImage MainImageRgb888;
+//            QImage MainImageRgb888;
 
-            if (MainStream::MainImageBuffer.size() == 1) {
-                MainImageRgb888 = MainStream::MainImageBuffer.at(0);
+//            if (MainStream::MainImageBuffer.size() < index) {
+//                MainImageRgb888 = MainStream::MainImageBuffer.at(0);
+//            } else {
+//                MainImageRgb888 = MainStream::MainImageBuffer.at(index);
+//            }
+
+//            QByteArray tempData;
+//            QBuffer tempBuffer(&tempData);
+//            MainImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
+//            MainImageBase64 = QString(tempData.toBase64());
+
+            if (MainStream::MainImageBuffer.size() < index) {
+                MainImageBase64 = MainStream::MainImageBuffer.at(0);
             } else {
-                MainImageRgb888 = MainStream::MainImageBuffer.takeFirst();
+                MainImageBase64 = MainStream::MainImageBuffer.at(index);
             }
-
-            QByteArray tempData;
-            QBuffer tempBuffer(&tempData);
-            MainImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
-            MainImageBase64 = QString(tempData.toBase64());
         } else {
             MainImageBase64 = QString("");
         }
@@ -250,20 +367,38 @@ void UploadAlarmMsgToAlarmHostUsingTcp::AlarmMsg(int id)
         QDomText mainStreamText = AckDom.createTextNode(MainImageBase64);
         DeviceAlarmImage.appendChild(mainStreamText);
     } else if (id == 1) {//右防区图像
+        if (SubStream::TriggerTimeBuffer.size() > 0) {
+            if (SubStream::TriggerTimeBuffer.size() < index) {
+                DeviceAlarmImage.setAttribute("triggertime", SubStream::TriggerTimeBuffer.at(0));
+            } else {
+                DeviceAlarmImage.setAttribute("triggertime", SubStream::TriggerTimeBuffer.at(index));
+            }
+        } else {
+            DeviceAlarmImage.setAttribute("triggertime", QString(""));
+        }
+
         QString SubImageBase64;
         if (SubStream::SubImageBuffer.size() > 0) {
-            QImage SubImageRgb888;
+//            QImage SubImageRgb888;
 
-            if (SubStream::SubImageBuffer.size() == 1) {
-                SubImageRgb888 = SubStream::SubImageBuffer.at(0);
+//            if (SubStream::SubImageBuffer.size() < index) {
+//                SubImageRgb888 = SubStream::SubImageBuffer.at(0);
+//            } else {
+//                SubImageRgb888 = SubStream::SubImageBuffer.at(index);
+//                SubImageRgb888.save(QString("/mnt/right_%1.jpg").arg(index),"JPG");
+//            }
+
+//            QByteArray tempData;
+//            QBuffer tempBuffer(&tempData);
+//            SubImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
+//            SubImageBase64 = QString(tempData.toBase64());
+
+
+            if (SubStream::SubImageBuffer.size() < index) {
+                SubImageBase64 = SubStream::SubImageBuffer.at(0);
             } else {
-                SubImageRgb888 = SubStream::SubImageBuffer.takeFirst();
+                SubImageBase64 = SubStream::SubImageBuffer.at(index);
             }
-
-            QByteArray tempData;
-            QBuffer tempBuffer(&tempData);
-            SubImageRgb888.save(&tempBuffer,"JPG");//按照JPG解码保存数据
-            SubImageBase64 = QString(tempData.toBase64());
         } else {
             SubImageBase64 = QString("");
         }
@@ -366,7 +501,7 @@ QString UploadAlarmMsgToAlarmHostUsingTcp::GetAlarmDetailInfo()
     data[27] = 0;
     data[28] = GlobalConfig::ip_addr;
     data[29] = GlobalConfig::beep_during_temp * SCHEDULER_TICK / 1000;
-    data[30] = 0;
+    data[30] = GlobalConfig::gl_chnn_index;
     StatusInfoList << CommonCode(data);
 
     data.clear();
@@ -510,4 +645,95 @@ QString UploadAlarmMsgToAlarmHostUsingTcp::CommonCode(QByteArray data)
     }
 
     return str.join(" ");
+}
+
+void UploadAlarmMsgToAlarmHostUsingTcp::UploadStressAlarmMsg(int id, int index)
+{
+    //1、打包报警信息
+    QString MessageMerge;
+    QDomDocument AckDom;
+
+    //xml声明
+    QString XmlHeader("version=\"1.0\" encoding=\"UTF-8\"");
+    AckDom.appendChild(AckDom.createProcessingInstruction("xml", XmlHeader));
+
+    //创建根元素
+    QDomElement RootElement = AckDom.createElement("Device");
+
+    RootElement.setAttribute("DeviceIP", GlobalConfig::LocalHostIP);
+
+    if (id == 0) {//左防区
+        RootElement.setAttribute("DefenceID", GlobalConfig::MainDefenceID);
+    } else if (id == 1) {//右防区
+        RootElement.setAttribute("DefenceID", GlobalConfig::SubDefenceID);
+    }
+
+    AckDom.appendChild(RootElement);
+
+    //创建DeviceAlarmImage元素
+    QDomElement DeviceAlarmImage = AckDom.createElement("DeviceAlarmImage");
+
+    DeviceAlarmImage.setAttribute("id", QString::number(id));
+    DeviceAlarmImage.setAttribute("status", "");
+    DeviceAlarmImage.setAttribute("msg", "");
+
+    if (id == 0) {//左防区图像
+        if (MainStream::TriggerTimeBuffer.size() > 0) {
+            if (MainStream::TriggerTimeBuffer.size() < index) {
+                DeviceAlarmImage.setAttribute("triggertime", MainStream::TriggerTimeBuffer.at(0));
+            } else {
+                DeviceAlarmImage.setAttribute("triggertime", MainStream::TriggerTimeBuffer.at(index));
+            }
+        } else {
+            DeviceAlarmImage.setAttribute("triggertime", QString(""));
+        }
+
+        QString MainImageBase64;
+        if (MainStream::MainImageBuffer.size() > 0) {
+            if (MainStream::MainImageBuffer.size() < index) {
+                MainImageBase64 = MainStream::MainImageBuffer.at(0);
+            } else {
+                MainImageBase64 = MainStream::MainImageBuffer.at(index);
+            }
+        } else {
+            MainImageBase64 = QString("");
+        }
+
+        QDomText mainStreamText = AckDom.createTextNode(MainImageBase64);
+        DeviceAlarmImage.appendChild(mainStreamText);
+    } else if (id == 1) {//右防区图像
+        if (SubStream::TriggerTimeBuffer.size() > 0) {
+            if (SubStream::TriggerTimeBuffer.size() < index) {
+                DeviceAlarmImage.setAttribute("triggertime", SubStream::TriggerTimeBuffer.at(0));
+            } else {
+                DeviceAlarmImage.setAttribute("triggertime", SubStream::TriggerTimeBuffer.at(index));
+            }
+        } else {
+            DeviceAlarmImage.setAttribute("triggertime", QString(""));
+        }
+
+        QString SubImageBase64;
+        if (SubStream::SubImageBuffer.size() > 0) {
+            if (SubStream::SubImageBuffer.size() < index) {
+                SubImageBase64 = SubStream::SubImageBuffer.at(0);
+            } else {
+                SubImageBase64 = SubStream::SubImageBuffer.at(index);
+            }
+        } else {
+            SubImageBase64 = QString("");
+        }
+
+        QDomText subStreamText = AckDom.createTextNode(SubImageBase64);
+        DeviceAlarmImage.appendChild(subStreamText);
+    }
+
+    RootElement.appendChild(DeviceAlarmImage);
+
+    QTextStream Out(&MessageMerge);
+    AckDom.save(Out,4);
+
+    int length = MessageMerge.size();
+    MessageMerge = QString("IALARM:") + QString("%1").arg(length,13,10,QLatin1Char('0')) + MessageMerge;
+
+    GlobalConfig::SendAlarmMsgToAlarmHostBuffer.append(MessageMerge.toAscii());
 }

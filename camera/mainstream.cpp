@@ -3,7 +3,8 @@
 #include "globalconfig.h"
 
 MainStream *MainStream::instance = NULL;
-QList<QImage> MainStream::MainImageBuffer = QList<QImage>();
+QList<QByteArray> MainStream::MainImageBuffer = QList<QByteArray>();
+QList<QString> MainStream::TriggerTimeBuffer = QList<QString>();
 
 MainStream::MainStream(QObject *parent) :
     QObject(parent)
@@ -34,13 +35,20 @@ void MainStream::Start()
     }
 }
 
-void MainStream::slotCaptureFrame(QImage image)
+void MainStream::slotCaptureFrame(const QImage &image)
 {
-    if (MainImageBuffer.size() == 3) {
+    if (MainImageBuffer.size() == 10) {//每秒保存一张图片，buffer里面保存的是10s之前的图片
         MainImageBuffer.removeFirst();
+        TriggerTimeBuffer.removeFirst();
     }
 
-    MainImageBuffer.append(image);
+    QByteArray tempData;
+    QBuffer tempBuffer(&tempData);
+    image.save(&tempBuffer,"JPG");//按照JPG解码保存数据
+    QByteArray Base64 = tempData.toBase64();
+
+    MainImageBuffer.append(Base64);
+    TriggerTimeBuffer.append(CommonSetting::GetCurrentDateTimeNoSpace());
 
     //摄像头在线
     GlobalConfig::MainStreamStateInfo = 1;
